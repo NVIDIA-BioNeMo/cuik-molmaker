@@ -2,35 +2,41 @@
 `cuik-molmaker` is a specialized package designed for molecular featurization, converting chemical structures into formats that can be effectively used as inputs for deep learning models, particularly graph neural networks (GNNs).
 ## Setup conda environment
 ```
+# Set environment variables
+export PYTHON_VERSION=3.11
+export RDKIT_VERSION=2025.03.2
+export TORCH_VERSION=2.6.0
+
 # Create conda env
-conda create -n cuik_molmaker_build python=3.11 conda-forge::rdkit==2024.03.4 conda-forge::pybind11==2.13.6 conda-forge::pytorch-cpu==2.6.0 conda-forge::libboost-devel==1.84.0 conda-forge::libboost-python-devel==1.84.0 conda-forge::numpy==1.26.4
+conda create -n cuik_molmaker_build python=${PYTHON_VERSION} conda-forge::rdkit==${RDKIT_VERSION} conda-forge::pybind11==2.13.6 conda-forge::pytorch-cpu==${TORCH_VERSION} conda-forge::libboost-devel==1.86.0 conda-forge::libboost-python-devel==1.86.0 
 
 # Activate conda env
 conda activate cuik_molmaker_build
 ```
 
-## Compile and run
+## Build C++ extension and pip wheels
 ```
-cd repo/
-mkdir -p build && cd build
-# ensure that build/ directory is empty
+# Build C++ extension
+TORCH_VERSION=${TORCH_VERSION} RDKIT_VERSION=${RDKIT_VERSION}   PYTHON_VERSION=${PYTHON_VERSION}  python setup.py build_ext --inplace
 
-# HACK: This is to accommodate NumPy<=2.0. In NumPy 2.0, `numpy/core/include` was moved to `numpy/_core/include`
+
+# Build pip wheels
+pip install build
+TORCH_VERSION=${TORCH_VERSION} RDKIT_VERSION=${RDKIT_VERSION}   PYTHON_VERSION=${PYTHON_VERSION}  python -m build  --outdir conda_rdkit  --wheel
+
+```
+
+#### HACK: This is to accommodate NumPy<=2.0. In NumPy 2.0, `numpy/core/include` was moved to `numpy/_core/include`
 ln -s $CONDA_PREFIX/lib/python3.11/site-packages/numpy/_core/include $CONDA_PREFIX/lib/python3.11/site-packages/numpy/core/include
 
-cmake -DCMAKE_PREFIX_PATH="$CONDA_PREFIX/lib/python3.11/site-packages/torch/share/cmake;$CONDA_PREFIX" ..
 
-make -j4
+## Install from wheel and test
+```
+# Install from wheel
+pip install /path/to/wheel_dir/cuik_molmaker-0.1-*py311*-none-manylinux2014_x86_64.whl
 
-# .so should be created
-
-## Optional: Install as PyPI package
-cd path/to/repo
-pip install .
-
-# this should create a cuik_molmaker directory with .so file and a __init__.py file.
-
-# Test that install works
+# Test that installation is working correctly
+pip install pytest
 pytest -s tests/python/test_featurize_dims.py
 ```
 
@@ -47,15 +53,21 @@ tensor([ 0,  2,  9,  6, 10,  5])
 
 ## Minimal conda env for import and running
 ```
+# Set environment variables
+export PYTHON_VERSION=3.11
+export RDKIT_VERSION=2025.03.2
+export TORCH_VERSION=2.6.0
+
 # Create minimal conda env
-conda create -n cuik_molmaker_import python=3.11 conda-forge::rdkit==2024.03.4 conda-forge::pytorch==2.6.0
+conda create -n cuik_molmaker_import python=${PYTHON_VERSION} conda-forge::rdkit==${RDKIT_VERSION} conda-forge::pytorch==${TORCH_VERSION}
 
 conda activate cuik_molmaker_import
 
-cd path/to/repo
-pip install .
-python -c "import cuik_molmaker; print(dir(cuik_molmaker))"
+# Install from wheel
+pip install /path/to/wheel_dir/cuik_molmaker-0.1-*py311*-none-manylinux2014_x86_64.whl
 
+# Test that installation is working correctly
+python -c "import cuik_molmaker; print(dir(cuik_molmaker))"
 ```
 
 ## Testing
@@ -76,9 +88,9 @@ cd /path/to/build
 ### Running python tests using pytest
 ```
 # Step 1: Install cuik-molmaker using pip
-cd path/to/repo
-pip install .
+pip install /path/to/wheel_dir/cuik_molmaker-0.1-*py311*-none-manylinux2014_x86_64.whl
 
 # Step 2: Run pytest
+cd path/to/repo
 pytest -s tests/python
 ```

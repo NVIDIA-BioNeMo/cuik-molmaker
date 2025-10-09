@@ -11,14 +11,48 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Add option for building tests
 option(CUIKMOLMAKER_BUILD_TESTS "Build tests for cuik_molmaker" OFF)
 
+# Set RPATH settings
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
 # Add compiler flags
-add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
+# Line 23: Platform-specific compiler flags
+if(MSVC)
+    add_compile_options(/O2 /W4)
+else()
+    add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
+endif()
 
+# Set Python paths to match RDKit's Python dependency
+set(PYTHON_ROOT_DIR $ENV{CONDA_PREFIX})
+message(STATUS "PYTHON_ROOT_DIR: ${PYTHON_ROOT_DIR}")
 
-# Find required packages
+# Set Python paths and hints before FindPython is called
+# Line 30: Platform-specific Python path
+if(WIN32)
+    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/python.exe")
+else()
+    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/bin/python")
+endif()
+message(STATUS "Using Python executable: ${Python_EXECUTABLE}")
+
+# Make sure FindPython uses our specified executable by setting Python_ROOT
+set(Python_ROOT "${CONDA_PREFIX}")
+
+# Explicitly specify Python hints to FindPython
+set(CMAKE_FIND_FRAMEWORK NEVER) # Avoid issues with macOS frameworks
+set(CMAKE_PREFIX_PATH "${CONDA_PREFIX};${CMAKE_PREFIX_PATH}")
+
+# Find required packages - will use the Python_EXECUTABLE we specified
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
+message(STATUS "Python_EXECUTABLE: ${Python_EXECUTABLE}")
+message(STATUS "Python_INCLUDE_DIRS: ${Python_INCLUDE_DIRS}")
+message(STATUS "Python_LIBRARIES: ${Python_LIBRARIES}")
+
 find_package(Torch REQUIRED) 
 message(STATUS "TORCH_INCLUDE_DIRS: ${TORCH_INCLUDE_DIRS}")
 find_library(TORCH_PYTHON_LIBRARY torch_python PATH "${TORCH_INSTALL_PREFIX}/lib")
@@ -33,12 +67,11 @@ if(CUIKMOLMAKER_BUILD_TESTS)
 endif()
 
 find_package(pybind11 REQUIRED)
-# execute_process(
-#    COMMAND ${Python_EXECUTABLE} -c "import rdkit; print(rdkit.__path__[0])"
-#    OUTPUT_VARIABLE RDKIT_PYTHON_PATH
-#    OUTPUT_STRIP_TRAILING_WHITESPACE
-# )
-# message(STATUS "RDKit Python path: ${RDKIT_PYTHON_PATH}")
+
+# Find Boost package
+find_package(Boost REQUIRED COMPONENTS system serialization iostreams)
+message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
 
 # Set RDKit paths explicitly
 # set(RDKit_DIR "${RDKIT_PYTHON_PATH}/lib/cmake/rdkit")
@@ -71,6 +104,7 @@ target_include_directories(cuik_molmaker_core PUBLIC
     ${RDKIT_INCLUDE_DIRS}
     ${Python3_NumPy_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
 )
 
 # Link against required libraries for core library
@@ -79,8 +113,26 @@ target_link_libraries(cuik_molmaker_core PUBLIC
     ${TORCH_LIBRARIES}
     ${PYTHON_LIBRARIES}
     ${TORCH_PYTHON_LIBRARY}
+    ${Boost_LIBRARIES}
 )
-
+# Lines 108-111 and 123-126: Platform-specific RPATH
+if(UNIX)
+    set_target_properties(cuik_molmaker_core PROPERTIES
+        INSTALL_RPATH "$ORIGIN/../../../.."
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+    
+    set_target_properties(cuik_molmaker PROPERTIES
+        INSTALL_RPATH "\$ORIGIN/../../..:\$ORIGIN/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+elseif(WIN32)
+    # On Windows, DLLs should be in the same directory or on PATH
+    # No RPATH needed, but we can set output directory
+    set_target_properties(cuik_molmaker_core PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+endif()
 # Create the Python module using the core library
 pybind11_add_module(cuik_molmaker
     src/cuik_molmaker_cpp.cpp
@@ -89,6 +141,12 @@ pybind11_add_module(cuik_molmaker
 # Link the Python module against the core library
 target_link_libraries(cuik_molmaker PRIVATE
     cuik_molmaker_core
+)
+
+# Set RPATH for the Python module
+set_target_properties(cuik_molmaker PROPERTIES
+    INSTALL_RPATH "\$ORIGIN/../../..:\$ORIGIN/lib"
+    BUILD_WITH_INSTALL_RPATH TRUE
 )
 
 # Set installation targets
@@ -116,3 +174,4 @@ if(CUIKMOLMAKER_BUILD_TESTS)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Catch2/Catch.cmake)
     catch_discover_tests(catch2_tests)
 endif()
+
