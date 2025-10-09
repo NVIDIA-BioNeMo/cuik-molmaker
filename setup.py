@@ -9,6 +9,7 @@ import configparser
 from setuptools.command.build_ext import build_ext
 import subprocess
 import sysconfig
+import platform
 
 class CMakeBuild(build_ext):
     def run(self):
@@ -83,9 +84,23 @@ lib_dir = os.path.join(dest_dir, 'lib')
 os.makedirs(dest_dir, exist_ok=True)
 os.makedirs(lib_dir, exist_ok=True)
 
+# Detect platform and set appropriate file extensions
+system = platform.system()
+if system == 'Darwin':  # macOS
+    so_suffix = f'cpython-{PYTHON_DIGIT_ONLY_VERSION}-darwin.so'
+    lib_extension = 'dylib'
+elif system == 'Linux':
+    so_suffix = f'cpython-{PYTHON_DIGIT_ONLY_VERSION}-x86_64-linux-gnu.so'
+    lib_extension = 'so'
+elif system == 'Windows':
+    so_suffix = f'cpython-{PYTHON_DIGIT_ONLY_VERSION}-win32.so'
+    lib_extension = 'dll'
+else:
+    print(f"WARNING: Unsupported platform: {system}")
+    raise ValueError(f"Unsupported platform: {system}")
 
 # Check if .so file exists, display helpful message if not
-so_file = os.path.join('build', f'cuik_molmaker.cpython-{PYTHON_DIGIT_ONLY_VERSION}-x86_64-linux-gnu.so')
+so_file = os.path.join('build', f'cuik_molmaker.{so_suffix}')
 print(f"Looking for compiled extension at: {so_file}")
 
 if os.path.exists(so_file):
@@ -98,7 +113,7 @@ else:
     # sys.exit(1)
 
 # Check for the shared library
-lib_file = os.path.join('build', 'libcuik_molmaker_core.so')
+lib_file = os.path.join('build', f'libcuik_molmaker_core.{lib_extension}')
 if os.path.exists(lib_file):
     print(f"Found shared library, copying to {lib_dir}")
     shutil.copy2(lib_file, lib_dir)
@@ -116,10 +131,10 @@ if not os.path.exists(init_file):
         f.write("import os\n")
         f.write("import sys\n")
         f.write("\n")
-        f.write("# Find the .so file in this directory\n")
+        f.write(f"# Find the .{so_suffix} file in this directory\n")
         f.write("_module_dir = Path(__file__).parent\n")
         f.write("for file in os.listdir(_module_dir):\n")
-        f.write("    if file.endswith('.so') and 'cpython' in file:\n")
+        f.write(f"    if file.endswith('.{so_suffix}') and 'cpython' in file:\n")
         f.write("        # Add the extension module directly\n")
         f.write("        from importlib.machinery import ExtensionFileLoader\n")
         f.write("        from importlib.util import spec_from_loader, module_from_spec\n")
@@ -148,8 +163,8 @@ setup(
     # Explicitly list the package instead of using find_packages()
     packages=["cuik_molmaker", "cuik_molmaker.lib"],
     package_data={
-        'cuik_molmaker': ['*.so'],  # Include Python extension
-        'cuik_molmaker.lib': ['*.so'],  # Include shared libraries
+        'cuik_molmaker': [f'*.{lib_extension}', "*.so"],  # Include Python extension
+        'cuik_molmaker.lib': [f'*.{lib_extension}'],  # Include shared libraries
     },
     cmdclass={
         'build_ext': CMakeBuild,

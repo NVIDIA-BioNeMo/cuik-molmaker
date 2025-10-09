@@ -20,24 +20,14 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
 # Add compiler flags
-# Line 23: Platform-specific compiler flags
-if(MSVC)
-    add_compile_options(/O2 /W4)
-else()
-    add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
-endif()
+add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
 
 # Set Python paths to match RDKit's Python dependency
 set(PYTHON_ROOT_DIR $ENV{CONDA_PREFIX})
 message(STATUS "PYTHON_ROOT_DIR: ${PYTHON_ROOT_DIR}")
 
 # Set Python paths and hints before FindPython is called
-# Line 30: Platform-specific Python path
-if(WIN32)
-    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/python.exe")
-else()
-    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/bin/python")
-endif()
+set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/bin/python")
 message(STATUS "Using Python executable: ${Python_EXECUTABLE}")
 
 # Make sure FindPython uses our specified executable by setting Python_ROOT
@@ -115,24 +105,10 @@ target_link_libraries(cuik_molmaker_core PUBLIC
     ${TORCH_PYTHON_LIBRARY}
     ${Boost_LIBRARIES}
 )
-# Lines 108-111 and 123-126: Platform-specific RPATH
-if(UNIX)
-    set_target_properties(cuik_molmaker_core PROPERTIES
-        INSTALL_RPATH "$ORIGIN/../../../.."
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
-    
-    set_target_properties(cuik_molmaker PROPERTIES
-        INSTALL_RPATH "\$ORIGIN/../../..:\$ORIGIN/lib"
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
-elseif(WIN32)
-    # On Windows, DLLs should be in the same directory or on PATH
-    # No RPATH needed, but we can set output directory
-    set_target_properties(cuik_molmaker_core PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
-endif()
+set_target_properties(cuik_molmaker_core PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../../../.."
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
 # Create the Python module using the core library
 pybind11_add_module(cuik_molmaker
     src/cuik_molmaker_cpp.cpp
@@ -143,11 +119,20 @@ target_link_libraries(cuik_molmaker PRIVATE
     cuik_molmaker_core
 )
 
-# Set RPATH for the Python module
-set_target_properties(cuik_molmaker PROPERTIES
-    INSTALL_RPATH "\$ORIGIN/../../..:\$ORIGIN/lib"
-    BUILD_WITH_INSTALL_RPATH TRUE
-)
+# Set RPATH for the Python module - platform specific
+if(APPLE)
+    # macOS: Use @loader_path to find dylib in lib/ subdirectory
+    set_target_properties(cuik_molmaker PROPERTIES
+        INSTALL_RPATH "@loader_path/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+else()
+    # Linux: Use $ORIGIN to find .so in lib/ subdirectory
+    set_target_properties(cuik_molmaker PROPERTIES
+        INSTALL_RPATH "$ORIGIN/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+endif()
 
 # Set installation targets
 install(TARGETS cuik_molmaker
