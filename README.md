@@ -10,9 +10,8 @@
 # Set environment variables
 export PYTHON_VERSION=3.11
 export RDKIT_VERSION=2025.03.2
-export TORCH_VERSION=2.6.0
 
-conda create -n cuik_molmaker_env python=${PYTHON_VERSION} conda-forge::rdkit==${RDKIT_VERSION} conda-forge::pybind11==2.13.6 conda-forge::pytorch-cpu==${TORCH_VERSION} conda-forge::libboost-devel==1.86.0 conda-forge::libboost-python-devel==1.86.0 
+conda create -n cuik_molmaker_env python=${PYTHON_VERSION} conda-forge::rdkit==${RDKIT_VERSION} conda-forge::pybind11==2.13.6 conda-forge::libboost-devel==1.86.0 conda-forge::libboost-python-devel==1.86.0 
 
 conda activate cuik_molmaker_env
 ```
@@ -27,7 +26,7 @@ python scripts/check_and_install_cuik_molmaker.py
 #### Usage: Computing atom and bond features
 ```python
 import cuik_molmaker
-import torch
+import numpy as np
 
 # List all available atom onehot features
 print(cuik_molmaker.list_all_atom_onehot_features())
@@ -35,19 +34,19 @@ print(cuik_molmaker.list_all_atom_onehot_features())
 # Compute atom (atomic number, number of hydrogen, chirality) and bond (bond type) features for acetic acid
 acetic_acid_smiles = "CC(=O)O"
 
-# Get atom onehot feature names as torch tensor
-atom_onehot_feature_tensor = cuik_molmaker.atom_onehot_feature_names_to_tensor(['atomic-number', 'num-hydrogens', 'chirality'])
+# Get atom onehot feature names as NumPy array
+atom_onehot_feature_array = cuik_molmaker.atom_onehot_feature_names_to_array(['atomic-number', 'num-hydrogens', 'chirality'])
 
-# Get bond feature names as torch tensor
-bond_feature_tensor = cuik_molmaker.bond_feature_names_to_tensor('bond-type-onehot')
+# Get bond feature names as NumPy array
+bond_feature_array = cuik_molmaker.bond_feature_names_to_array(['bond-type-onehot'])
 
 # Set parameters for featurization
 explicit_h, offset_carbon, duplicate_edges, add_self_loop = False, False, True, False
 
 # Featurize
-all_features =cuik_molmaker.mol_featurizer(acetic_acid_smiles, atom_onehot_feature_tensor, torch.tensor([]), bond_feature_tensor, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
+all_features =cuik_molmaker.mol_featurizer(acetic_acid_smiles, atom_onehot_feature_array, np.array([]), bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
 
-# This returns a list of tensors.
+# This returns a list of NumPy arrays.
 # First index contains atom features
 print(all_features[0].shape)
 

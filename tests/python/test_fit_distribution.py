@@ -14,14 +14,14 @@ def test_get_discrete_cdf():
     cdf = get_discrete_cdf(x, y)
 
     discrete_cdf_ref = np.array([0.1, 0.3, 0.6, 0.8, 1.0])
-    assert np.allclose(np.array(cdf[1]), discrete_cdf_ref)
+    np.testing.assert_allclose(np.array(cdf[1]), discrete_cdf_ref)
 
     # Case where there are missing values in the middle in x
     x = np.array([1, 2, 3, 4, 5, 8, 9, 10])
     y = np.array([0.1, 0.2, 0.3, 0.05, 0.05, 0.1, 0.1, 0.1])
     cdf = get_discrete_cdf(x, y)
     discrete_cdf_ref = np.array([0.1, 0.3, 0.6, 0.65, 0.7, 0.7, 0.7, 0.8, 0.9, 1.0])
-    assert np.allclose(np.array(cdf[1]), discrete_cdf_ref)
+    np.testing.assert_allclose(np.array(cdf[1]), discrete_cdf_ref)
 
 
 @pytest.mark.slow
@@ -63,6 +63,9 @@ def test_best_fit_distribution_discrete(rdkit2D_desc_df):
             0.9999999999999999,
         ]
     )
-    assert np.allclose(
-        best_dist[1], best_dist_param_ref
-    ), f"Parameters do not match reference: {best_dist[1]} != {best_dist_param_ref}"
+    np.testing.assert_allclose(
+        best_dist[1],
+        best_dist_param_ref,
+        err_msg="Parameters do not match reference: "
+        f"{best_dist[1]} != {best_dist_param_ref}",
+    )

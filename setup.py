@@ -4,6 +4,7 @@
 import configparser
 import glob
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -12,53 +13,125 @@ import sysconfig
 from setuptools import find_packages, setup
 from setuptools.command.build_ext import build_ext
 
+# Set global vars
+RDKIT_VERSION = os.environ.get("RDKIT_VERSION")
+PYTHON_VERSION = os.environ.get("PYTHON_VERSION")
+CXX11_ABI = os.environ.get("CUIKMOLMAKER_CXX11_ABI")
+SYSTEM = platform.system()
+
 
 class CMakeBuild(build_ext):
     def run(self):
-        # Ensure build directory exists
-        build_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "build")
-        os.makedirs(build_dir, exist_ok=True)
 
-        # Prepare CMake command
-        cmake_args = [
-            "cmake",
-            f"-DCMAKE_PREFIX_PATH={os.environ['CONDA_PREFIX']}/lib/"
-            f"python{PYTHON_VERSION}/site-packages/torch/share/cmake;"
-            f"{os.environ['CONDA_PREFIX']}",
-            os.path.abspath(os.path.dirname(__file__)),
-        ]
+        # Detect if we're doing an install against pip rdkit
+        cmake_extra_args = []
+        cuikmolmaker_build_against_pip = os.getenv(
+            "CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT"
+        )
+        cmake_extra_args.extend(
+            [
+                f"-DCUIKMOLMAKER_CXX11_ABI={CXX11_ABI}",
+            ]
+        )
+        if cuikmolmaker_build_against_pip:
+            CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR = os.getenv(
+                "CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR"
+            )
+            if not CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR:
+                raise ValueError(
+                    "CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR must be set when "
+                    "building against pip rdkit"
+                )
+            CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR = os.getenv(
+                "CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR"
+            )
+            if not CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR:
+                raise ValueError(
+                    "CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR must be set when "
+                    "building against pip rdkit"
+                )
+            CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR = os.getenv(
+                "CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR"
+            )
+            if not CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR:
+                raise ValueError(
+                    "CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR must be set "
+                    "when building against pip rdkit"
+                )
+            cmake_extra_args.extend(
+                [
+                    "-DCUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT=ON",
+                    f"-DCUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR="
+                    f"{CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR}",
+                    f"-DCUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR="
+                    f"{CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR}",
+                    f"-DCUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR="
+                    f"{CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR}",
+                ]
+            )
+        # Prepare platform-specific CMake command
+        platform_name = platform.system()
 
-        # Run CMake
-        print("Running CMake:", " ".join(cmake_args))
-        subprocess.check_call(cmake_args, cwd=build_dir)
+        if platform_name == "Windows":
+            cmake_prefix_path = os.environ["CONDA_PREFIX"]
+            cmake_extra_args.extend(
+                ["-DCMAKE_BUILD_TYPE=Release", "-G", "Ninja", "-S", ".", "-B", "build"]
+            )
 
-        # Run Make
-        print("Running make -j4")
-        subprocess.check_call(["make", "-j4"], cwd=build_dir)
+            cmake_cmd = [
+                "cmake",
+                f"-DCMAKE_PREFIX_PATH={cmake_prefix_path}",
+            ] + cmake_extra_args
+
+            # Run CMake configure
+            print("Running CMake configure command:", " ".join(cmake_cmd))
+            subprocess.check_call(
+                cmake_cmd, cwd=os.path.abspath(os.path.dirname(__file__))
+            )
+
+            # Run CMake build
+            cmake_build_cmd = ["cmake", "--build", "build", "-j", "4"]
+            print("Running CMake build command:", " ".join(cmake_build_cmd))
+            subprocess.check_call(
+                cmake_build_cmd, cwd=os.path.abspath(os.path.dirname(__file__))
+            )
+
+        elif platform_name in ("Linux", "Darwin"):
+
+            # Ensure build directory exists
+            build_dir = os.path.join(
+                os.path.abspath(os.path.dirname(__file__)), "build"
+            )
+            os.makedirs(build_dir, exist_ok=True)
+
+            # Prepare cmake command
+            cmake_args = [
+                "cmake",
+                f"-DCMAKE_PREFIX_PATH={os.environ['CONDA_PREFIX']}",
+            ]
+            cmake_args.extend(cmake_extra_args)
+            cmake_args.append(os.path.abspath(os.path.dirname(__file__)))
+
+            # Run CMake configure
+            print("Running CMake:", " ".join(cmake_args))
+            subprocess.check_call(cmake_args, cwd=build_dir)
+
+            # Run make
+            print("Running make -j4")
+            subprocess.check_call(["make", "-j4"], cwd=build_dir)
+        else:
+            raise ValueError(f"Unsupported platform: {platform_name}")
 
         # Call the original build_ext to copy .so files, etc.
         super().run()
 
 
-# Get torch and rdkit versions with priority: config settings > env vars > default
-TORCH_VERSION = os.environ.get("TORCH_VERSION")
-RDKIT_VERSION = os.environ.get("RDKIT_VERSION")
-PYTHON_VERSION = os.environ.get("PYTHON_VERSION")
-
-
-if TORCH_VERSION is None:
-    print("Error: PyTorch version is not set.")
-    print("Please specify it as follows using environment variables:")
-    print(
-        "TORCH_VERSION=2.6.0 RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 pip install ."
-    )
-    sys.exit(1)
-
 if RDKIT_VERSION is None:
     print("Error: RDKit version is not set.")
     print("Please specify it as follows using environment variables:")
     print(
-        "TORCH_VERSION=2.6.0 RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 pip install ."
+        "RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 CUIKMOLMAKER_CXX11_ABI=ON "
+        "python setup.py build_ext --inplace"
     )
     sys.exit(1)
 
@@ -66,10 +139,20 @@ if PYTHON_VERSION is None:
     print("Error: Python version is not set.")
     print("Please specify it as follows using environment variables:")
     print(
-        "TORCH_VERSION=2.6.0 RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 pip install ."
+        "RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 CUIKMOLMAKER_CXX11_ABI=ON "
+        "python setup.py build_ext --inplace"
     )
     sys.exit(1)
 
+if CXX11_ABI is None:
+    print("Error: CXX11_ABI is not set.")
+    print("CXX11_ABI can be either ON or OFF.")
+    print("Please specify it as follows using environment variables:")
+    print(
+        "RDKIT_VERSION=2024.03.4 PYTHON_VERSION=3.11 CUIKMOLMAKER_CXX11_ABI=ON "
+        "python setup.py build_ext --inplace"
+    )
+    sys.exit(1)
 
 # Update setup.cfg with the Python tag
 PYTHON_DIGIT_ONLY_VERSION = PYTHON_VERSION.replace(".", "")
@@ -83,20 +166,38 @@ config["bdist_wheel"]["plat_name"] = sysconfig.get_platform()
 with open("setup.cfg", "w") as f:
     config.write(f)
 
-print(f"Environment TORCH_VERSION: {os.environ.get('TORCH_VERSION')}")
-print(f"Environment RDKIT_VERSION: {os.environ.get('RDKIT_VERSION')}")
-
 print(
-    f"Building with TORCH_VERSION={TORCH_VERSION}, RDKIT_VERSION={RDKIT_VERSION}, "
-    f"PYTHON_VERSION={PYTHON_VERSION}"
+    f"Building with RDKIT_VERSION={RDKIT_VERSION}, "
+    f"PYTHON_VERSION={PYTHON_VERSION}, "
+    f"CXX11_ABI={CXX11_ABI}"
 )
-
 
 # Create package directory structure first
 dest_dir = os.path.join("cuik_molmaker")
-lib_dir = os.path.join(dest_dir, "lib")
 utils_dir = os.path.join(dest_dir, "utils")
 data_dir = os.path.join(dest_dir, "data")
+
+# Set appropriate file extensions based on system
+if SYSTEM == "Darwin":  # macOS
+    so_suffix = f"cpython-{PYTHON_DIGIT_ONLY_VERSION}-darwin.so"
+    lib_extension = "dylib"
+    lib_dir = os.path.join(dest_dir, "lib")
+    lib_file = os.path.join("build", f"libcuik_molmaker_core.{lib_extension}")
+elif SYSTEM == "Linux":
+    so_suffix = f"cpython-{PYTHON_DIGIT_ONLY_VERSION}-x86_64-linux-gnu.so"
+    lib_extension = "so"
+    lib_dir = os.path.join(dest_dir, "lib")
+    lib_file = os.path.join("build", f"libcuik_molmaker_core.{lib_extension}")
+elif SYSTEM == "Windows":
+    machine = platform.machine().lower()  # like AMD64
+    so_suffix = f"cp{PYTHON_DIGIT_ONLY_VERSION}-win_{machine}.pyd"
+    lib_extension = "dll"
+    lib_file = os.path.join("build", f"cuik_molmaker_core.{lib_extension}")
+    # On Windows, DLLs should be in the same directory or on PATH
+    lib_dir = dest_dir
+else:
+    raise ValueError(f"Unsupported platform: {SYSTEM}")
+
 os.makedirs(dest_dir, exist_ok=True)
 os.makedirs(lib_dir, exist_ok=True)
 os.makedirs(utils_dir, exist_ok=True)
@@ -142,7 +243,7 @@ if not os.path.exists(lib_init_file):
 
 setup(
     name="cuik_molmaker",
-    version="0.1",
+    version="0.2",
     author="S. Veccham",
     author_email="sveccham@nvidia.com",
     description="C++ module for featurizing molecules",
@@ -161,6 +262,8 @@ setup(
     package_data={
         "cuik_molmaker": [
             "*.so",
+            "*.pyd",
+            "*.dll",
             "*.py",
             "data/*.json",
             "data/*.md",
@@ -168,6 +271,8 @@ setup(
         "cuik_molmaker.lib": [
             "*.so",
             "__init__.py",
+            "*.dll",
+            "*.dylib",
         ],  # Include shared libraries and __init__.py
         "cuik_molmaker.utils": ["*.py"],  # Include Python files
     },
@@ -177,12 +282,11 @@ setup(
     },
     install_requires=[
         f"rdkit=={RDKIT_VERSION}",
-        f"torch=={TORCH_VERSION}",
         "scipy",
+        "pandas",
     ],
     build_requires=[
         f"rdkit=={RDKIT_VERSION}",
-        f"torch=={TORCH_VERSION}",
     ],
     tests_require=["pytest"],
     extras_require={
@@ -209,11 +313,8 @@ setup(
     },
 )
 
-# Check if .so file exists, display helpful message if not
-so_file = os.path.join(
-    "build",
-    f"cuik_molmaker_cpp.cpython-{PYTHON_DIGIT_ONLY_VERSION}-x86_64-linux-gnu.so",
-)
+# Check if compiled extension exists, display helpful message if not
+so_file = os.path.join("build", f"cuik_molmaker_cpp.{so_suffix}")
 print(f"Looking for compiled extension at: {so_file}")
 
 if os.path.exists(so_file):
@@ -227,7 +328,6 @@ else:
     sys.exit(1)
 
 # Check for the shared library
-lib_file = os.path.join("build", "libcuik_molmaker_core.so")
 if os.path.exists(lib_file):
     print(f"Found shared library, copying to {lib_dir}")
     shutil.copy2(lib_file, lib_dir)

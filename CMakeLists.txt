@@ -2,14 +2,36 @@
 # SPDX-License-Identifier: Apache-2.0
 
 cmake_minimum_required(VERSION 3.15)
-project(cuik_molmaker_cpp VERSION 0.1 LANGUAGES CXX)
+project(cuik_molmaker_cpp VERSION 0.2 LANGUAGES CXX)
 
 # Set C++20 standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Include required modules
+include(CMakeDependentOption)
+
 # Add option for building tests
 option(CUIKMOLMAKER_BUILD_TESTS "Build tests for cuik_molmaker" OFF)
+option(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT
+       "Whether or not to build against the rdkit from pip" OFF)
+option(CUIKMOLMAKER_CXX11_ABI
+    "Whether or not to build with CXX11 ABI"
+    OFF
+)
+cmake_dependent_option(
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR
+  "Location of the rdkit library directory for pip installs" ""
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT "")
+cmake_dependent_option(
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR
+  "Location of the rdkit include directory for pip installs" ""
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT "")
+cmake_dependent_option(
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR
+  "Location of the boost include directory for pip installs" ""
+  CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT "")
+
 
 # Set RPATH settings
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
@@ -17,21 +39,41 @@ set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+if(CUIKMOLMAKER_CXX11_ABI)
+  message(STATUS "Using cxx11 ABI")
+  add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
+else()
+  message(STATUS "Using pre-cxx11 ABI")
+  add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+endif()
 
-# Add compiler flags
-add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
+# Platform-specific compiler flags
+if(MSVC)
+    add_compile_options(/O2 /W4)
+else()
+    add_compile_options(-O3 -Wall -Wmissing-field-initializers -Wmaybe-uninitialized -Wuninitialized)
+endif()
+
+# Windows-specific: Tell RDKit we're importing from DLLs
+if(WIN32)
+    add_compile_definitions(RDKIT_DYN_LINK)
+    add_compile_definitions(BOOST_ALL_DYN_LINK)
+endif()
 
 # Set Python paths to match RDKit's Python dependency
 set(PYTHON_ROOT_DIR $ENV{CONDA_PREFIX})
 message(STATUS "PYTHON_ROOT_DIR: ${PYTHON_ROOT_DIR}")
 
 # Set Python paths and hints before FindPython is called
-set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/bin/python")
+if(WIN32)
+    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/python.exe")
+else()
+    set(Python_EXECUTABLE "$ENV{CONDA_PREFIX}/bin/python")
+endif()
 message(STATUS "Using Python executable: ${Python_EXECUTABLE}")
 
 # Make sure FindPython uses our specified executable by setting Python_ROOT
-set(Python_ROOT "${CONDA_PREFIX}")
+set(Python_ROOT "$ENV{CONDA_PREFIX}")
 
 # Explicitly specify Python hints to FindPython
 set(CMAKE_FIND_FRAMEWORK NEVER) # Avoid issues with macOS frameworks
@@ -43,10 +85,6 @@ message(STATUS "Python_EXECUTABLE: ${Python_EXECUTABLE}")
 message(STATUS "Python_INCLUDE_DIRS: ${Python_INCLUDE_DIRS}")
 message(STATUS "Python_LIBRARIES: ${Python_LIBRARIES}")
 
-find_package(Torch REQUIRED) 
-message(STATUS "TORCH_INCLUDE_DIRS: ${TORCH_INCLUDE_DIRS}")
-find_library(TORCH_PYTHON_LIBRARY torch_python PATH "${TORCH_INSTALL_PREFIX}/lib")
-
 # Enable testing only if CUIKMOLMAKER_BUILD_TESTS is ON
 if(CUIKMOLMAKER_BUILD_TESTS)
     message(STATUS "Building with tests enabled")
@@ -56,30 +94,106 @@ if(CUIKMOLMAKER_BUILD_TESTS)
     include(cmake/FetchCatch2.cmake)
 endif()
 
-find_package(pybind11 REQUIRED)
+# Use Python include directories found by FindPython
+set(PYTHON_INCLUDE_DIRS "${Python_INCLUDE_DIRS}")
+message(STATUS "Using PYTHON_INCLUDE_DIRS: ${PYTHON_INCLUDE_DIRS}")
 
-# Find Boost package
-find_package(Boost REQUIRED COMPONENTS system serialization iostreams)
-message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
-message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
+find_package(pybind11 2.13 REQUIRED)
 
-# Set RDKit paths explicitly
-# set(RDKit_DIR "${RDKIT_PYTHON_PATH}/lib/cmake/rdkit")
-# message(STATUS "Setting RDKit_DIR to: ${RDKit_DIR}")
-
-find_package(RDKit REQUIRED)
-message(STATUS "RDKit_VERSION: ${RDKit_VERSION}")
-message(STATUS "RDKit_INCLUDE_DIRS: ${RDKit_INCLUDE_DIRS}")
-message(STATUS "RDKit_LIBRARIES: ${RDKit_LIBRARIES}")
-
-set(RDKit_LIBS
+if(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+    # Find Boost package
+    find_package(Boost REQUIRED COMPONENTS system serialization iostreams)
+    message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+    message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
+    message(STATUS "Building against system RDKit from conda")
+    find_package(RDKit REQUIRED)
+    set(RDKit_LIBS
     RDKit::GraphMol
     RDKit::MolStandardize
     RDKit::SmilesParse
     )
 
-find_package(Python3 COMPONENTS NumPy REQUIRED)
-message(STATUS "NumPy include dirs: ${Python3_NumPy_INCLUDE_DIRS}")
+    message(STATUS "RDKit_VERSION: ${RDKit_VERSION}")
+    message(STATUS "RDKit_INCLUDE_DIRS: ${RDKit_INCLUDE_DIRS}")
+    message(STATUS "RDKit_LIBRARIES: ${RDKit_LIBRARIES}")
+else()
+    if(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR)
+    message(
+    FATAL_ERROR
+        "CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR must be set for builds against pip install"
+    )
+    endif()
+    if(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR)
+    message(
+    FATAL_ERROR
+        "CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR must be set for builds against pip install"
+    )
+    endif()
+    if(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR)
+    message(
+    FATAL_ERROR
+        "CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR must be set for builds against pip install"
+    )
+    endif()
+
+    message(STATUS "CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR: ${CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR}")
+    message(STATUS "CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR: ${CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR}")
+    message(STATUS "CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR: ${CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR}")
+
+  # make a list of all files ine the libdir
+  # Normalize path to use forward slashes (CMake prefers this)
+  file(TO_CMAKE_PATH "${CUIKMOLMAKER_BUILD_AGAINST_PIP_LIBDIR}" LIBDIR_NORMALIZED)
+  
+  if(WIN32)
+    # On Windows, look for .dll files
+    file(GLOB ALL_RDKIT_FILES "${LIBDIR_NORMALIZED}/RDKit*.dll")
+    # Select only certain RDKit*.dll files
+    set(RDKIT_FILES "")
+    foreach(file ${ALL_RDKIT_FILES})
+        if(file MATCHES "RDKitGraphMol" OR file MATCHES "RDKitRDGeneral" OR file MATCHES "RDKitSmilesParse" OR file MATCHES "RDKitSubstructMatch")
+            list(APPEND RDKIT_FILES "${file}")
+        endif()
+    endforeach()
+  else()
+    # On Unix, look for all library files
+    file(GLOB RDKIT_FILES "${LIBDIR_NORMALIZED}/*")
+  endif()
+  
+  # for each file, make an imported library with that lib as source
+  message(
+    STATUS "Searched for RDKit libs in: ${LIBDIR_NORMALIZED}")
+  message(STATUS "Found RDKit pip libs: ${RDKIT_FILES}")
+  # Populate RDKIT_LIBS with the imported libraries
+  foreach(lib ${RDKIT_FILES})
+    get_filename_component(libname ${lib} NAME_WE)
+    message(STATUS "libname: ${libname}")
+    add_library(${libname} SHARED IMPORTED)
+    set_target_properties(${libname} PROPERTIES IMPORTED_LOCATION ${lib})
+    if(WIN32)
+        # In Windows, we need to set the IMPORTED_IMPLIB property to the .lib file
+        if(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+            # Get the path to the matching .lib file by replacing .dll with .lib in the filename
+            string(REGEX REPLACE "\\.dll$" ".lib" pip_rdkit_lib_path "${lib}")
+            # Normalize the path (for CMake compatibility)
+            file(TO_CMAKE_PATH "${pip_rdkit_lib_path}" pip_rdkit_lib_path_normalized)
+            message(STATUS "  pip_rdkit_lib: ${pip_rdkit_lib_path_normalized}")
+            set_target_properties(${libname} PROPERTIES IMPORTED_IMPLIB "${pip_rdkit_lib_path_normalized}")
+
+        else()
+            set_target_properties(${libname} PROPERTIES IMPORTED_IMPLIB "${libname}.lib")
+        endif()
+    endif()
+    # Set include dirs to include both CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR and
+    # CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR
+    target_include_directories(
+      ${libname} SYSTEM INTERFACE ${CUIKMOLMAKER_BUILD_AGAINST_PIP_INCDIR}
+                                  ${CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR})
+    list(APPEND RDKit_LIBS ${libname})
+  endforeach()
+  set(BOOST_INCLUDE_DIRS ${CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR})
+  message(STATUS "Using boost libs from pip RDKit ${CUIKMOLMAKER_BUILD_AGAINST_PIP_BOOSTINCLUDEDIR}")
+endif(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+
 
 # Create the core library that can be used by pybind11 and tests
 add_library(cuik_molmaker_core SHARED
@@ -90,41 +204,107 @@ add_library(cuik_molmaker_core SHARED
 
 # Add include directories for core library
 target_include_directories(cuik_molmaker_core PUBLIC
-    ${TORCH_INCLUDE_DIRS}
     ${RDKIT_INCLUDE_DIRS}
-    ${Python3_NumPy_INCLUDE_DIRS}
+    ${pybind11_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
 )
 
+message(STATUS "pybind11_INCLUDE_DIRS: ${pybind11_INCLUDE_DIRS}")
+
 # Link against required libraries for core library
-target_link_libraries(cuik_molmaker_core PUBLIC
-    ${RDKit_LIBS}
-    ${TORCH_LIBRARIES}
-    ${PYTHON_LIBRARIES}
-    ${TORCH_PYTHON_LIBRARY}
-    ${Boost_LIBRARIES}
-)
-if (NOT CUIKMOLMAKER_BUILD_TESTS)
-set_target_properties(cuik_molmaker_core PROPERTIES
-        INSTALL_RPATH "$ORIGIN/../../../.."
-        BUILD_WITH_INSTALL_RPATH TRUE
+message(STATUS "PYTHON_LIBRARIES: ${PYTHON_LIBRARIES}")
+message(STATUS "Python_LIBRARIES: ${Python_LIBRARIES}")
+
+if(APPLE)
+    message(STATUS "Linking order: MacOS")
+    target_link_libraries(cuik_molmaker_core PUBLIC
+        ${RDKit_LIBS}
+        ${pybind11_LIBRARIES}
+        ${PYTHON_LIBRARIES} # PYTHON_LIBRARIES needed for MacOS
+        ${Boost_LIBRARIES}
+    )
+else()
+    message(STATUS "Linking order: Linux or Windows")
+    target_link_libraries(cuik_molmaker_core PUBLIC
+        ${Boost_LIBRARIES}
+        ${RDKit_LIBS}
+        ${Python_LIBRARIES}
     )
 endif()
-# Create the Python module using the core library
+
+# On macOS, allow undefined symbols for Python C API functions
+# They will be resolved at runtime when loaded by the Python interpreter
+if(APPLE)
+    target_link_options(cuik_molmaker_core PRIVATE "-undefined" "dynamic_lookup")
+endif()
+
+if(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+    if(UNIX)
+        set_target_properties(cuik_molmaker_core PROPERTIES
+            INSTALL_RPATH "$ORIGIN/../../rdkit.libs;$ORIGIN/../../../.."
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    elseif(APPLE)
+        # TODO: Figure this out for MacOS
+        set_target_properties(cuik_molmaker_core PROPERTIES
+            INSTALL_RPATH "$ORIGIN/../../../.."
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    else()
+        # On Windows, DLLs should be in the same directory or on PATH
+        # No RPATH needed, but we can set output directory
+        set_target_properties(cuik_molmaker_core PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        )
+    endif()
+else()
+    if(APPLE OR UNIX)
+        set_target_properties(cuik_molmaker_core PROPERTIES
+            INSTALL_RPATH "$ORIGIN/../../../.."
+            BUILD_WITH_INSTALL_RPATH TRUE
+        )
+    else()
+        # TODO: Need to figure this out for Windows
+        # On Windows, DLLs should be in the same directory or on PATH
+        # No RPATH needed, but we can set output directory
+        # set_target_properties(cuik_molmaker_core PROPERTIES
+        #     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        # )
+    endif(APPLE OR UNIX)
+endif(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+
+    # Create the Python module using the core library
 pybind11_add_module(cuik_molmaker_cpp
     src/cuik_molmaker_cpp.cpp
 )
+
+message(STATUS "pybind11_LIBRARIES: ${pybind11_LIBRARIES}")
 
 # Link the Python module against the core library
 target_link_libraries(cuik_molmaker_cpp PRIVATE
     cuik_molmaker_core
 )
 
-# Set RPATH for the Python module
-if (NOT CUIKMOLMAKER_BUILD_TESTS)
+# Set RPATH for the Python module - platform specific
+if(APPLE)
+    # macOS: Use @loader_path to find dylib in lib/ subdirectory
+    set(rpath_entries "@loader_path/lib")
+
     set_target_properties(cuik_molmaker_cpp PROPERTIES
-        INSTALL_RPATH "\$ORIGIN/../../..:\$ORIGIN/lib"
+        INSTALL_RPATH "${rpath_entries}"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+# elseif(WIN32)
+    # On Windows, do not set INSTALL_RPATH/BUILD_WITH_INSTALL_RPATH.
+    # Instead, ensure that the DLLs are either (1) in the same directory as the .pyd,
+    # or (2) on PATH at runtime. This is necessary so cuik_molmaker_cpp can find its dependencies.
+    # Optionally, copy dependent DLLs to the output directory if needed.
+    # No RPATH equivalent for Windows.
+else()
+    # Linux: Use $ORIGIN to find .so in lib/ subdirectory
+    set_target_properties(cuik_molmaker_cpp PROPERTIES
+        INSTALL_RPATH "$ORIGIN/lib;$ORIGIN/../../../"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
 endif()
@@ -147,6 +327,8 @@ if(CUIKMOLMAKER_BUILD_TESTS)
     target_link_libraries(catch2_tests PRIVATE
         cuik_molmaker_core
         Catch2::Catch2WithMain
+        ${Python_LIBRARIES}  # Add this if not already present
+        pybind11::embed
     )
     
     # Register Catch2 tests with CTest
@@ -154,4 +336,3 @@ if(CUIKMOLMAKER_BUILD_TESTS)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Catch2/Catch.cmake)
     catch_discover_tests(catch2_tests)
 endif()
-

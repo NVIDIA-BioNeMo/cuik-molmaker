@@ -19,14 +19,13 @@ cmake --version
 
 ## Setup conda environment
 ```bash
-# Set desired versions python, RDKit, and PyTorch versions as environment variables. 
-# Here is an example for python 3.11, RDKit 2025.03.2, and PyTorch 2.6.0.
+# Set desired python and RDKit versions as environment variables. 
+# Here is an example for python 3.11, RDKit 2025.03.2.
 export PYTHON_VERSION=3.11
 export RDKIT_VERSION=2025.03.2
-export TORCH_VERSION=2.6.0
 
 # Create conda env
-conda create -n cuik_molmaker_build python=$PYTHON_VERSION conda-forge::rdkit==$RDKIT_VERSION conda-forge::pybind11==2.13.6 conda-forge::librdkit-dev==$RDKIT_VERSION conda-forge::pybind11==2.13.6 conda-forge::pytorch-cpu==$TORCH_VERSION conda-forge::libboost-devel==1.86.0 conda-forge::libboost-python-devel==1.86.0
+conda create -n cuik_molmaker_build python=$PYTHON_VERSION conda-forge::rdkit==$RDKIT_VERSION conda-forge::pybind11==2.13.6 conda-forge::librdkit-dev==$RDKIT_VERSION conda-forge::pybind11==2.13.6  conda-forge::libboost-devel==1.86.0 conda-forge::libboost-python-devel==1.86.0
 
 # Activate conda env
 conda activate cuik_molmaker_build
@@ -40,13 +39,13 @@ git clone https://github.com/NVIDIA-Digital-Bio/cuik-molmaker
 cd cuik_molmaker
 
 # Build C++ extension for cuik_molmaker
-TORCH_VERSION=$TORCH_VERSION RDKIT_VERSION=$RDKIT_VERSION PYTHON_VERSION=$PYTHON_VERSION python setup.py build_ext --inplace
+RDKIT_VERSION=$RDKIT_VERSION PYTHON_VERSION=$PYTHON_VERSION python setup.py build_ext --inplace
 
 # Install build
 pip install build
 
 # Build wheel
-TORCH_VERSION=$TORCH_VERSION RDKIT_VERSION=$RDKIT_VERSION PYTHON_VERSION=$PYTHON_VERSION python -m build --outdir path/to/output/directory --wheel
+RDKIT_VERSION=$RDKIT_VERSION PYTHON_VERSION=$PYTHON_VERSION python -m build --outdir path/to/output/directory --wheel
 ```
 
 ## Install cuik_molmaker from wheel

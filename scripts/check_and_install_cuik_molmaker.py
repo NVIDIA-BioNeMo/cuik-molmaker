@@ -19,6 +19,15 @@ except ImportError:
     )
     exit(1)
 
+if len(sys.argv) < 2:
+    raise ValueError(
+        "Specify version of cuik-molmaker to install as an argument."
+        "Example: python check_and_install_cuik_molmaker.py 0.2"
+    )
+
+CUIK_MOLMAKER_VERSION = sys.argv[1]
+print(f"Attempting to install cuik-molmaker version: {CUIK_MOLMAKER_VERSION}")
+
 # Check if the system is Linux, MacOS or Windows
 system = sys.platform
 print(f"System: {system}")
@@ -196,7 +205,7 @@ try:
             "--no-deps",
             "--extra-index-url",
             wheel_url,
-            "cuik_molmaker==0.1",
+            f"cuik_molmaker=={CUIK_MOLMAKER_VERSION}",
         ],
         check=True,
     )

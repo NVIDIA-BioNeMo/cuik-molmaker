@@ -1,6 +1,6 @@
 # Atom One-Hot Features
 
-The following features are available for atom featurization in one-hot encoding format and are available in the `atom_onehot_feature_names_to_tensor` function. They are also listed in the `list_all_atom_onehot_features` function.
+The following features are available for atom featurization in one-hot encoding format and are available in the `atom_onehot_feature_names_to_array` function. They are also listed in the `list_all_atom_onehot_features` function.
 
 | Feature | Description |
 |---------|------------|
@@ -23,7 +23,7 @@ The following features are available for atom featurization in one-hot encoding 
 
 # Atom Float Features
 
-The following features are available for atom featurization in floating-point format and are available in the `atom_float_feature_names_to_tensor` function. They are also listed in the `list_all_atom_float_features` function.
+The following features are available for atom featurization in floating-point format and are available in the `atom_float_feature_names_to_array` function. They are also listed in the `list_all_atom_float_features` function.
 
 | Feature | Description |
 |---------|------------|
@@ -55,7 +55,7 @@ The following features are available for atom featurization in floating-point fo
 
 # Bond Features
 
-The following features are available for bond featurization and are available in the `bond_feature_names_to_tensor` function. They are also listed in the `list_all_bond_features` function.
+The following features are available for bond featurization and are available in the `bond_feature_names_to_array` function. They are also listed in the `list_all_bond_features` function.
 
 | Feature | Description |
 |---------|------------|

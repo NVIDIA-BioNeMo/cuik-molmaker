@@ -4,12 +4,12 @@
 //! @file This file defines generic feature-related functions,
 //!       some of which are declared in features.h for exporting to Python.
 
+#include <cstdint>
 #define DEBUG_LOGGING 0
-
-#include "features.h"
 
 #include <GraphMol/MolOps.h>  // For RDKit's addHs
 
+#include "features.h"
 #include "float_features.h"
 #include "one_hot.h"
 // RDkit headers
@@ -49,7 +49,7 @@ static GraphData read_graph(const std::string& smiles_string, bool explicit_H) {
   std::vector<unsigned int> atomOrder;
   atomOrder.reserve(num_atoms);
   RDKit::Canon::rankMolAtoms(*mol, atomOrder);
-  assert(atomOrder.size() == num_atoms);
+  assert(atomOrder.shape() == num_atoms);
 #endif
 
   // Allocate an array of atom data, and fill it from the RDKit atom data.
@@ -264,7 +264,7 @@ static const std::unordered_map<std::string, int64_t> atom_float_name_to_enum{
 // This is called from Python to list atom float features in a format that will be faster
 // to interpret inside `mol_featurizer`, passed in the `atom_property_list_float` parameter.
 // See the declaration in features.h for more details.
-at::Tensor atom_float_feature_names_to_tensor(const std::vector<std::string>& features) {
+py::array_t<int64_t> atom_float_feature_names_to_array(const std::vector<std::string>& features) {
   const size_t               num_features = features.size();
   std::unique_ptr<int64_t[]> feature_enum_values(new int64_t[num_features]);
   for (size_t i = 0; i < num_features; ++i) {
@@ -276,7 +276,7 @@ at::Tensor atom_float_feature_names_to_tensor(const std::vector<std::string>& fe
     }
   }
   const int64_t dims[1] = {int64_t(num_features)};
-  return torch_tensor_from_array<int64_t>(std::move(feature_enum_values), dims, 1, c10::ScalarType::Long);
+  return py_array_from_array(std::move(feature_enum_values), dims, 1);
 }
 
 std::vector<std::string> list_all_atom_float_features() {
@@ -310,9 +310,9 @@ static const std::unordered_map<std::string, int64_t> atom_onehot_name_to_enum{
 };
 
 // This is called from Python to list atom one-hot features in a format that will be faster
-// to interpret inside `mol_featurizer`, passed in the `atom_property_list_onehot` parameter.
-// See the declaration in features.h for more details.
-at::Tensor atom_onehot_feature_names_to_tensor(const std::vector<std::string>& features) {
+// to interpret inside `mol_featurizer` and `batch_mol_featurizer`, passed in the
+// `atom_property_list_onehot` parameter.
+py::array_t<int64_t> atom_onehot_feature_names_to_array(const std::vector<std::string>& features) {
   const size_t               num_features = features.size();
   std::unique_ptr<int64_t[]> feature_enum_values(new int64_t[num_features]);
   for (size_t i = 0; i < num_features; ++i) {
@@ -324,7 +324,7 @@ at::Tensor atom_onehot_feature_names_to_tensor(const std::vector<std::string>& f
     }
   }
   const int64_t dims[1] = {int64_t(num_features)};
-  return torch_tensor_from_array<int64_t>(std::move(feature_enum_values), dims, 1, c10::ScalarType::Long);
+  return py_array_from_array(std::move(feature_enum_values), dims, 1);
 }
 
 std::vector<std::string> list_all_atom_onehot_features() {
@@ -360,7 +360,7 @@ std::vector<std::string> list_all_bond_features() {
 // This is called from Python to list bond features in a format that will be faster
 // to interpret inside `mol_featurizer`, passed in the `bond_property_list` parameter.
 // See the declaration in features.h for more details.
-at::Tensor bond_feature_names_to_tensor(const std::vector<std::string>& features) {
+py::array_t<int64_t> bond_feature_names_to_array(const std::vector<std::string>& features) {
   const size_t               num_features = features.size();
   std::unique_ptr<int64_t[]> feature_enum_values(new int64_t[num_features]);
   for (size_t i = 0; i < num_features; ++i) {
@@ -372,7 +372,7 @@ at::Tensor bond_feature_names_to_tensor(const std::vector<std::string>& features
     }
   }
   const int64_t dims[1] = {int64_t(num_features)};
-  return torch_tensor_from_array<int64_t>(std::move(feature_enum_values), dims, 1, c10::ScalarType::Long);
+  return py_array_from_array(std::move(feature_enum_values), dims, 1);
 }
 
 // Maps feature level strings to `FeatureLevel` enum values
@@ -383,28 +383,26 @@ static const std::unordered_map<std::string, int64_t> feature_level_to_enum{
   {   std::string("graph"),    int64_t(FeatureLevel::GRAPH)},
 };
 
-// This is called by `mol_featurizer` and `batch_mol_featurizer` to create the atom (node) features Torch tensor.
+// This is called by `mol_featurizer` and `batch_mol_featurizer` to create the atom (node) features pybind array.
 template <typename T>
-void create_atom_features(const GraphData&  graph,
-                          const at::Tensor& atom_property_list_onehot,
-                          const at::Tensor& atom_property_list_float,
-                          size_t            single_atom_float_count,
-                          bool              offset_carbon,
-                          T*                current_atom_data) {
+void create_atom_features(const GraphData&            graph,
+                          const py::array_t<int64_t>& atom_property_list_onehot,
+                          const py::array_t<int64_t>& atom_property_list_float,
+                          size_t                      single_atom_float_count,
+                          bool                        offset_carbon,
+                          T*                          current_atom_data) {
   const size_t num_onehot_properties =
-    (atom_property_list_onehot.scalar_type() == c10::ScalarType::Long && atom_property_list_onehot.ndimension() == 1) ?
-      atom_property_list_onehot.size(0) :
+    (atom_property_list_onehot.dtype() == py::dtype("int64") && atom_property_list_onehot.ndim() == 1) ?
+      atom_property_list_onehot.shape(0) :
       0;
-  // NOTE: If TensorBase::data_ptr is ever removed, change it to TensorBase::const_data_ptr.
-  // Some torch version being used doesn't have const_data_ptr yet.
   const int64_t* const property_list_onehot =
-    (num_onehot_properties != 0) ? atom_property_list_onehot.data_ptr<int64_t>() : nullptr;
+    (num_onehot_properties != 0) ? static_cast<const int64_t*>(atom_property_list_onehot.data()) : nullptr;
   const size_t num_float_properties =
-    (atom_property_list_float.scalar_type() == c10::ScalarType::Long && atom_property_list_float.ndimension() == 1) ?
-      atom_property_list_float.size(0) :
+    (atom_property_list_float.dtype() == py::dtype("int64") && atom_property_list_float.ndim() == 1) ?
+      atom_property_list_float.shape(0) :
       0;
   const int64_t* const property_list_float =
-    (num_float_properties != 0) ? atom_property_list_float.data_ptr<int64_t>() : nullptr;
+    (num_float_properties != 0) ? static_cast<const int64_t*>(atom_property_list_float.data()) : nullptr;
 
   for (size_t i = 0; i < num_onehot_properties; ++i) {
     const int64_t property = property_list_onehot[i];
@@ -422,19 +420,19 @@ void create_atom_features(const GraphData&  graph,
   }
 }
 
-// This is called by `mol_featurizer` and `batch_mol_featurizer` to create the bond (edge) features Torch tensor.
+// This is called by `mol_featurizer` and `batch_mol_featurizer` to create the bond (edge) features pybind array.
 template <typename T>
-void create_bond_features(const GraphData&  graph,
-                          const at::Tensor& bond_property_list,
-                          size_t            single_bond_float_count,
-                          const bool        duplicate_edges,
-                          bool              add_self_loop,
-                          T*                current_bond_data) {
-  const size_t num_properties =
-    (bond_property_list.scalar_type() == c10::ScalarType::Long && bond_property_list.ndimension() == 1) ?
-      bond_property_list.size(0) :
-      0;
-  const int64_t* const property_list = (num_properties != 0) ? bond_property_list.data_ptr<int64_t>() : nullptr;
+void create_bond_features(const GraphData&            graph,
+                          const py::array_t<int64_t>& bond_property_list,
+                          size_t                      single_bond_float_count,
+                          const bool                  duplicate_edges,
+                          bool                        add_self_loop,
+                          T*                          current_bond_data) {
+  const size_t num_properties = (bond_property_list.dtype() == py::dtype("int64") && bond_property_list.ndim() == 1) ?
+                                  bond_property_list.shape(0) :
+                                  0;
+  const int64_t* const property_list =
+    (num_properties != 0) ? static_cast<const int64_t*>(bond_property_list.data()) : nullptr;
 
   // add_self_loop is only supported if duplicating edges
   add_self_loop = add_self_loop && duplicate_edges;
@@ -472,21 +470,20 @@ void create_bond_features(const GraphData&  graph,
 }
 
 // Computes the total dimension of atom features based on the property lists
-size_t compute_atom_dim(const at::Tensor& atom_property_list_onehot, const at::Tensor& atom_property_list_float) {
+size_t compute_atom_dim(const py::array_t<int64_t>& atom_property_list_onehot,
+                        const py::array_t<int64_t>& atom_property_list_float) {
   const size_t num_onehot_properties =
-    (atom_property_list_onehot.scalar_type() == c10::ScalarType::Long && atom_property_list_onehot.ndimension() == 1) ?
-      atom_property_list_onehot.size(0) :
+    (atom_property_list_onehot.dtype() == py::dtype("int64") && atom_property_list_onehot.ndim() == 1) ?
+      atom_property_list_onehot.shape(0) :
       0;
-  // NOTE: If TensorBase::data_ptr is ever removed, change it to TensorBase::const_data_ptr.
-  // Some torch version being used doesn't have const_data_ptr yet.
   const int64_t* const property_list_onehot =
-    (num_onehot_properties != 0) ? atom_property_list_onehot.data_ptr<int64_t>() : nullptr;
+    (num_onehot_properties != 0) ? static_cast<const int64_t*>(atom_property_list_onehot.data()) : nullptr;
   const size_t num_float_properties =
-    (atom_property_list_float.scalar_type() == c10::ScalarType::Long && atom_property_list_float.ndimension() == 1) ?
-      atom_property_list_float.size(0) :
+    (atom_property_list_float.dtype() == py::dtype("int64") && atom_property_list_float.ndim() == 1) ?
+      atom_property_list_float.shape(0) :
       0;
   const int64_t* const property_list_float =
-    (num_float_properties != 0) ? atom_property_list_float.data_ptr<int64_t>() : nullptr;
+    (num_float_properties != 0) ? static_cast<const int64_t*>(atom_property_list_float.data()) : nullptr;
 
   size_t single_atom_float_count = num_float_properties;
   for (size_t i = 0; i < num_onehot_properties; ++i) {
@@ -497,13 +494,13 @@ size_t compute_atom_dim(const at::Tensor& atom_property_list_onehot, const at::T
 }
 
 // Computes the total dimension of bond features based on the property list
-size_t compute_bond_dim(const at::Tensor& bond_property_list) {
-  const size_t num_properties =
-    (bond_property_list.scalar_type() == c10::ScalarType::Long && bond_property_list.ndimension() == 1) ?
-      bond_property_list.size(0) :
-      0;
-  const int64_t* const property_list = (num_properties != 0) ? bond_property_list.data_ptr<int64_t>() : nullptr;
-  size_t               single_bond_float_count = 0;
+size_t compute_bond_dim(const py::array_t<int64_t>& bond_property_list) {
+  const size_t num_properties = (bond_property_list.dtype() == py::dtype("int64") && bond_property_list.ndim() == 1) ?
+                                  bond_property_list.shape(0) :
+                                  0;
+  const int64_t* const property_list =
+    (num_properties != 0) ? static_cast<const int64_t*>(bond_property_list.data()) : nullptr;
+  size_t single_bond_float_count = 0;
   for (size_t i = 0; i < num_properties; ++i) {
     const int64_t property = property_list[i];
     if (BondFeature(property) == BondFeature::TYPE_ONE_HOT || BondFeature(property) == BondFeature::STEREO_ONE_HOT) {
@@ -515,14 +512,14 @@ size_t compute_bond_dim(const at::Tensor& bond_property_list) {
   return single_bond_float_count;
 }
 
-std::vector<at::Tensor> mol_featurizer(const std::string& smiles_string,
-                                       const at::Tensor&  atom_property_list_onehot,
-                                       const at::Tensor&  atom_property_list_float,
-                                       const at::Tensor&  bond_property_list,
-                                       bool               explicit_H,
-                                       bool               offset_carbon,
-                                       bool               duplicate_edges,
-                                       bool               add_self_loop) {
+std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
+                                      const py::array_t<int64_t>& atom_property_list_onehot,
+                                      const py::array_t<int64_t>& atom_property_list_float,
+                                      const py::array_t<int64_t>& bond_property_list,
+                                      bool                        explicit_H,
+                                      bool                        offset_carbon,
+                                      bool                        duplicate_edges,
+                                      bool                        add_self_loop) {
   return batch_mol_featurizer(std::vector{smiles_string},
                               atom_property_list_onehot,
                               atom_property_list_float,
@@ -533,14 +530,14 @@ std::vector<at::Tensor> mol_featurizer(const std::string& smiles_string,
                               add_self_loop);
 }
 
-std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
-                                             const at::Tensor&               atom_property_list_onehot,
-                                             const at::Tensor&               atom_property_list_float,
-                                             const at::Tensor&               bond_property_list,
-                                             bool                            explicit_H,
-                                             bool                            offset_carbon,
-                                             bool                            duplicate_edges,
-                                             bool                            add_self_loop) {
+std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
+                                            const py::array_t<int64_t>&     atom_property_list_onehot,
+                                            const py::array_t<int64_t>&     atom_property_list_float,
+                                            const py::array_t<int64_t>&     bond_property_list,
+                                            bool                            explicit_H,
+                                            bool                            offset_carbon,
+                                            bool                            duplicate_edges,
+                                            bool                            add_self_loop) {
   const size_t n_smiles = smiles_list.size();
 
   // Create graphs
@@ -575,11 +572,10 @@ std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smi
                          current_atom_data);
     current_atom_data += graph.num_atoms * single_atom_float_count;
   }
-  const int64_t dims[2] = {int64_t(total_num_atoms), int64_t(single_atom_float_count)};
-  at::Tensor    atom_features_tensor =
-    torch_tensor_from_array<float>(std::move(atom_data), dims, 2, c10::ScalarType::Float);
+  const int64_t      dims[2]                 = {int64_t(total_num_atoms), int64_t(single_atom_float_count)};
+  py::array_t<float> atom_features_array     = py_array_from_array<float>(std::move(atom_data), dims, 2);
   // Compute bond dimension
-  size_t single_bond_float_count = compute_bond_dim(bond_property_list);
+  size_t             single_bond_float_count = compute_bond_dim(bond_property_list);
 
   // add_self_loop is only supported if duplicating edges
   add_self_loop = add_self_loop && duplicate_edges;
@@ -604,9 +600,8 @@ std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smi
                          current_bond_data);
     current_bond_data += graph.num_bonds * duplicated_bond_float_count;  // move to position
   }
-  const int64_t bond_dims[2] = {int64_t(total_num_bonds), int64_t(single_bond_float_count)};
-  at::Tensor    bond_features_tensor =
-    torch_tensor_from_array<float>(std::move(bond_data), bond_dims, 2, c10::ScalarType::Float);
+  const int64_t      bond_dims[2]        = {int64_t(total_num_bonds), int64_t(single_bond_float_count)};
+  py::array_t<float> bond_features_array = py_array_from_array<float>(std::move(bond_data), bond_dims, 2);
 
   // Create batch
   size_t mol_offset     = 0;
@@ -620,9 +615,8 @@ std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smi
     mol_offset += total_num_bonds;
     n_atoms_offset += graph.num_atoms;
   }
-  const int64_t batch_dims[1] = {int64_t(total_num_atoms)};
-  at::Tensor    batch_tensor = torch_tensor_from_array<int64_t>(std::move(batch), batch_dims, 1, c10::ScalarType::Long);
-
+  const int64_t              batch_dims[1] = {int64_t(total_num_atoms)};
+  py::array_t<int64_t>       batch_array   = py_array_from_array<int64_t>(std::move(batch), batch_dims, 1);
   // Create edge_index
   std::unique_ptr<int64_t[]> edge_index(new int64_t[2 * total_num_bonds]);
 
@@ -651,9 +645,8 @@ std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smi
     n_atoms_offset += graph.num_atoms;
   }
 
-  int64_t    edge_index_dims[2] = {int64_t(2), int64_t(total_num_bonds)};
-  at::Tensor edge_index_tensor =
-    torch_tensor_from_array<int64_t>(std::move(edge_index), edge_index_dims, 2, c10::ScalarType::Long);
+  int64_t              edge_index_dims[2] = {int64_t(2), int64_t(total_num_bonds)};
+  py::array_t<int64_t> edge_index_array   = py_array_from_array<int64_t>(std::move(edge_index), edge_index_dims, 2);
 
   // Create rev_edge_index
   mol_offset = 0;
@@ -670,19 +663,19 @@ std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smi
     mol_offset += graph.num_bonds * 2;
   }
 
-  int64_t    rev_edge_index_dims[1] = {int64_t(duplication_factor * total_num_bonds)};
-  at::Tensor rev_edge_index_tensor =
-    torch_tensor_from_array<int64_t>(std::move(rev_edge_index), rev_edge_index_dims, 1, c10::ScalarType::Long);
+  int64_t              rev_edge_index_dims[1] = {int64_t(duplication_factor * total_num_bonds)};
+  py::array_t<int64_t> rev_edge_index_array =
+    py_array_from_array<int64_t>(std::move(rev_edge_index), rev_edge_index_dims, 1);
   // Prepare features for return
-  std::vector<at::Tensor> feature_tensors;
+  std::vector<py::array> feature_arrays;
 
-  feature_tensors.reserve(5);
-  feature_tensors.push_back(atom_features_tensor);
-  feature_tensors.push_back(bond_features_tensor);
-  feature_tensors.push_back(edge_index_tensor);
-  feature_tensors.push_back(rev_edge_index_tensor);
-  feature_tensors.push_back(batch_tensor);
-  return feature_tensors;
+  feature_arrays.reserve(5);
+  feature_arrays.push_back(atom_features_array);
+  feature_arrays.push_back(bond_features_array);
+  feature_arrays.push_back(edge_index_array);
+  feature_arrays.push_back(rev_edge_index_array);
+  feature_arrays.push_back(batch_array);
+  return feature_arrays;
 }
 
 // Creates an RWMol from a SMILES string.

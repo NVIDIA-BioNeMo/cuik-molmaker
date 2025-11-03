@@ -30,34 +30,33 @@
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <RDGeneral/types.h>
 
-// PyBind and Torch headers for use by library to be imported by Python
+// PyBind headers for use by library to be imported by Python
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
-#include <torch/extension.h>
 
 // This is necessary to export Python functions in a Python module named cuik_molmaker.
 PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.doc() = "Cuik MolMaker C++ plugin";  // Python module docstring
 
   // Functions in features.cpp
-  m.def("atom_onehot_feature_names_to_tensor",
-        &atom_onehot_feature_names_to_tensor,
-        "Accepts feature names and returns a tensor representing them as integers");
-  m.def("atom_float_feature_names_to_tensor",
-        &atom_float_feature_names_to_tensor,
-        "Accepts feature names and returns a tensor representing them as integers");
-  m.def("bond_feature_names_to_tensor",
-        &bond_feature_names_to_tensor,
-        "Accepts feature names and returns a tensor representing them as integers");
+  m.def("atom_onehot_feature_names_to_array",
+        &atom_onehot_feature_names_to_array,
+        "Accepts feature names and returns a NumPy array representing them as integers");
+  m.def("atom_float_feature_names_to_array",
+        &atom_float_feature_names_to_array,
+        "Accepts feature names and returns a NumPy array representing them as integers");
+  m.def("bond_feature_names_to_array",
+        &bond_feature_names_to_array,
+        "Accepts feature names and returns a NumPy array representing them as integers");
   m.def(
     "mol_featurizer",
     &mol_featurizer,
-    "Accepts a SMILES string and returns a list of torch tensors representing atom and bond features of the molecule.");
+    "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the molecule.");
   m.def(
     "batch_mol_featurizer",
     &batch_mol_featurizer,
-    "Accepts a list of SMILES strings and returns a list of torch tensors representing atom and bond features of the molecules.");
+    "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of the molecules.");
   m.def("list_all_atom_onehot_features",
         &list_all_atom_onehot_features,
         "Returns a list of all atom one-hot features.");

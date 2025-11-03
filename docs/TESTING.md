@@ -13,7 +13,7 @@ cd cuik-molmaker
 #### Configure cmake with test flag set to on
 ```bash
 mkdir build && cd build
-cmake -DCUIKMOLMAKER_BUILD_TESTS=ON -DCMAKE_PREFIX_PATH="$CONDA_PREFIX/lib/python$PYTHON_VERSION/site-packages/torch/share/cmake;$CONDA_PREFIX" ..
+cmake -DCUIKMOLMAKER_BUILD_TESTS=ON -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" ..
 ```
 #### Build and install `cuik-molmaker`
 ```bash

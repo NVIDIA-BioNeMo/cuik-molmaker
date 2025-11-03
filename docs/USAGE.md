@@ -3,7 +3,7 @@ Ensure that you have installed `cuik-molmaker` from [NVIDIA PyPI](https://pypi.n
 
 ## Generate atom and bond features
 ### For a single molecule
-#### Form tensors of required features
+#### Form arrays of required features
 ```python
 import cuik_molmaker
 
@@ -16,11 +16,11 @@ print(cuik_molmaker.list_all_atom_float_features())
 # List all available bond features
 print(cuik_molmaker.list_all_bond_features())
 
-atom_onehot_feature_tensor = cuik_molmaker.atom_onehot_feature_names_to_tensor(['atomic-number', 'total-degree', 'formal-charge'])
-atom_float_feature_tensor = cuik_molmaker.atom_float_feature_names_to_tensor(['mass', 'aromatic'])
-bond_feature_tensor = cuik_molmaker.bond_feature_names_to_tensor(['bond-type-onehot', 'conjugated'])
+atom_onehot_feature_array = cuik_molmaker.atom_onehot_feature_names_to_array(['atomic-number', 'total-degree', 'formal-charge'])
+atom_float_feature_array = cuik_molmaker.atom_float_feature_names_to_array(['mass', 'aromatic'])
+bond_feature_array = cuik_molmaker.bond_feature_names_to_array(['bond-type-onehot', 'conjugated'])
 ```
-If any of the features are not needed, pass an empty tensor by setting the tensor to `torch.tensor([])`.
+If any of the features are not needed, pass an empty array by setting the array to `np.array([])`.
 
 #### Set parameters for generation
 ```python
@@ -40,17 +40,17 @@ add_self_loop = False
 
 #### Generate atom and bond features
 ```python
-all_features =cuik_molmaker.mol_featurizer(smiles, atom_onehot_feature_tensor, atom_float_feature_tensor, bond_feature_tensor, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
+all_features =cuik_molmaker.mol_featurizer(smiles, atom_onehot_feature_array, atom_float_feature_array, bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
 
-# This returns a list of tensors.
-# First index contains atom features as a torch tensor
+# This returns a list of NumPy arrays.
+# First index contains atom features as a NumPy array
 # Atom features are concatencated from all one-hot features followed by all float features
 print(all_features[0].shape) # (num_atoms, atom_feature_dim)
 
-# Second index contains bond features as a torch tensor
+# Second index contains bond features as a NumPy array
 print(all_features[1].shape) # (2*num_bonds, bond_feature_dim)
 
-# Third index contains edge indices in COO format as a torch tensor
+# Third index contains edge indices in COO format as a NumPy array
 print(all_features[2].shape) # (2, 2*num_bonds)
 ```
 
@@ -59,7 +59,7 @@ print(all_features[2].shape) # (2, 2*num_bonds)
 smiles_list = ["CC(=O)OC1=CC=CC=C1C(=O)O", # aspirin
                "CN(C)CCOC(C1=CC=CC=C1)C1=CC=CC=C1", # diphenhydramine
 ]
-batch_features = cuik_molmaker.batch_mol_featurizer(smiles_list, atom_onehot_feature_tensor, atom_float_feature_tensor, bond_feature_tensor, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
+batch_features = cuik_molmaker.batch_mol_featurizer(smiles_list, atom_onehot_feature_array, atom_float_feature_array, bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
 
 # Atom features from all molecules are concatenated along dimension 0
 print(batch_features[0].shape) # (total_num_atoms, atom_feature_dim)

@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved. # noqa: E501
 # SPDX-License-Identifier: Apache-2.0
 
-import torch  # noqa: F401
 from rdkit import Chem
 
 import cuik_molmaker
@@ -13,7 +12,7 @@ def test_import_cuik_molmaker():
 
 
 def test_mol_featurizer_dims(sample_smiles1):
-    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_tensor(
+    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_array(
         [
             "atomic-number",
             "total-degree",
@@ -23,10 +22,10 @@ def test_mol_featurizer_dims(sample_smiles1):
             "hybridization",
         ]
     )
-    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_tensor(
+    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_array(
         ["aromatic", "mass"]
     )
-    bond_property_list = cuik_molmaker.bond_feature_names_to_tensor(
+    bond_property_list = cuik_molmaker.bond_feature_names_to_array(
         ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"]
     )
 
@@ -71,7 +70,7 @@ def test_mol_featurizer_dims(sample_smiles1):
 
 
 def test_mol_featurizer_variations_dims(sample_smiles1):
-    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_tensor(
+    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_array(
         [
             "atomic-number",
             "total-degree",
@@ -81,10 +80,10 @@ def test_mol_featurizer_variations_dims(sample_smiles1):
             "hybridization",
         ]
     )
-    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_tensor(
+    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_array(
         ["aromatic", "mass"]
     )
-    bond_property_list = cuik_molmaker.bond_feature_names_to_tensor(
+    bond_property_list = cuik_molmaker.bond_feature_names_to_array(
         ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"]
     )
     explicit_H, offset_carbon, duplicate_edges, add_self_loop = (
@@ -129,7 +128,7 @@ def test_mol_featurizer_variations_dims(sample_smiles1):
 
 def test_batch_mol_featurizer_dims(smiles_list_100):
 
-    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_tensor(
+    atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_array(
         [
             "atomic-number",
             "total-degree",
@@ -139,10 +138,10 @@ def test_batch_mol_featurizer_dims(smiles_list_100):
             "hybridization",
         ]
     )
-    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_tensor(
+    atom_float_property_list = cuik_molmaker.atom_float_feature_names_to_array(
         ["aromatic", "mass"]
     )
-    bond_property_list = cuik_molmaker.bond_feature_names_to_tensor(
+    bond_property_list = cuik_molmaker.bond_feature_names_to_array(
         ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"]
     )
     explicit_H, offset_carbon, duplicate_edges, add_self_loop = (

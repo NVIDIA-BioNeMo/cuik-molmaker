@@ -14,11 +14,17 @@
 #include <type_traits>
 #include <vector>
 
-// Torch tensor headers
-#include <ATen/ATen.h>
-#include <ATen/Functions.h>
+// RDKit headers
 #include <GraphMol/ROMol.h>
 #include <GraphMol/RWMol.h>
+
+// PyBind headers
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+
+#include "export.h"
+
+namespace py = pybind11;
 
 //! Levels at which features or labels can be associated
 //! String names are in `feature_level_to_enum` in features.cpp
@@ -122,7 +128,7 @@ template <> struct FeatureValues<int16_t> {
 
   template <typename T> static int16_t convertToFeatureType(T inputType) {
     static_assert(std::is_floating_point_v<T>);
-    return c10::detail::fp16_ieee_from_fp32_value(float(inputType));
+    return float32_to_fp16_ieee(float(inputType));
   }
 
   static constexpr bool is_finite(int16_t v) {
@@ -131,6 +137,69 @@ template <> struct FeatureValues<int16_t> {
   }
 
   using MathType = float;
+
+ private:
+  // Manual IEEE 754 half-precision conversion (replacing c10 dependency)
+  static int16_t float32_to_fp16_ieee(float f) {
+    union {
+      float    f;
+      uint32_t i;
+    } u = {f};
+
+    uint32_t sign     = (u.i >> 16) & 0x8000;               // Sign bit
+    int32_t  exp      = int32_t((u.i >> 23) & 0xff) - 127;  // Exponent (remove bias)
+    uint32_t mantissa = u.i & 0x7fffff;                     // Mantissa (23 bits)
+
+    // Handle special cases
+    if (exp == 128) {  // Infinity or NaN
+      return static_cast<int16_t>(sign | 0x7c00 | (mantissa ? 0x0200 : 0));
+    }
+
+    if (exp > 15) {  // Overflow -> Infinity
+      return static_cast<int16_t>(sign | 0x7c00);
+    }
+
+    if (exp < -14) {  // Underflow -> Zero or denormal
+      if (exp < -25)
+        return static_cast<int16_t>(sign);  // Too small -> zero
+
+      // Denormalized number
+      mantissa |= 0x800000;  // Add implicit leading 1
+      int shift = -14 - exp;
+
+      // Apply proper rounding considering all discarded bits from both shifts
+      // Total shift needed: shift + 13 (to go from 23-bit to 10-bit mantissa)
+      int      total_shift  = shift + 13;
+      uint32_t rounding_bit = (mantissa >> (total_shift - 1)) & 1;         // Bit at position total_shift-1
+      uint32_t lsb          = (mantissa >> total_shift) & 1;               // LSB of result
+      uint32_t sticky_bits  = mantissa & ((1u << (total_shift - 1)) - 1);  // All bits below rounding bit
+
+      // Round-to-even logic
+      uint32_t round_up = rounding_bit && (lsb || (sticky_bits != 0));
+
+      return static_cast<int16_t>(sign | ((mantissa >> total_shift) + round_up));
+    }
+
+    // Normal number
+    return static_cast<int16_t>(
+      sign | ((exp + 15) << 10) |
+      ((mantissa >> 13)  // Shift by 13 bits
+                         // Bit 12 is rounding bit. If bit 12 is 0, we round down (no change to other bits)
+                         // If bit 12 is 1, we are exactly halfway and rounding may be needed.
+
+       /* Truth table for rounding:
+       | bit 13 | sticky bits | Round up? | Explanation |
+       -------------------------------------------------
+       |  0     |   non-zero  |    Yes    | More than half way |
+       |  0     |   zero      |    No     | Exactly halfway - so no round to even |
+       |  1     |   non-zero  |    Yes    | FP16 result is odd, so round up   |
+       |  1     |   zero      |    Yes     | Exactly halfway, round up to even |
+       This truth table is same as OR operation between bit 13 and non-zero sticky bits
+       Code for non-zero sticky bits is ((mantissa & 0xFFF) != 0)
+       */
+       + (((mantissa >> 12) & 1) &&  // Round if bit 12 is 1
+          (((mantissa >> 13) & 1) || ((mantissa & 0xFFF) != 0)))));
+  }
 };
 //! Explicit instantiation of `FeatureValues` for `float` (FP32)
 template <> struct FeatureValues<float> {
@@ -158,7 +227,8 @@ template <> struct FeatureValues<double> {
     return double(inputType);
   }
 
-  static constexpr bool is_finite(double v) { return std::isfinite(v); }
+  // Note: std::isfinite is not constexpr in MSVC, so we can't make this constexpr
+  static inline bool is_finite(double v) { return std::isfinite(v); }
 
   using MathType = double;
 };
@@ -193,14 +263,22 @@ template <typename T> void deleter(void* p) {
   delete[] (T*)p;
 }
 
-//! Helper function to construct a torch `Tensor` from a C++ array.
-//! The `Tensor` takes ownership of the memory owned by `source`.
+//! Helper function to construct a pybind11 `py::array_t` from a C++ array.
+//! The `py::array_t` takes ownership of the memory owned by `source`.
 template <typename T>
-at::Tensor torch_tensor_from_array(std::unique_ptr<T[]>&& source,
-                                   const int64_t*         dims,
-                                   size_t                 num_dims,
-                                   c10::ScalarType        type) {
-  return at::from_blob(source.release(), at::IntArrayRef(dims, num_dims), deleter<T>, c10::TensorOptions(type));
+py::array_t<T> py_array_from_array(std::unique_ptr<T[]>&& source, const int64_t* dims, size_t num_dims) {
+  // Convert dims to vector of sizes for pybind11
+  std::vector<size_t> shape(num_dims);
+  for (size_t i = 0; i < num_dims; ++i) {
+    shape[i] = static_cast<size_t>(dims[i]);
+  }
+
+  // Create capsule that will handle deletion when array is destroyed
+  T*          raw_ptr = source.release();
+  py::capsule cleanup(raw_ptr, [](void* ptr) { delete[] static_cast<T*>(ptr); });
+
+  // Create py::array_t with shape, data pointer, and cleanup capsule
+  return py::array_t<T>(shape, raw_ptr, cleanup);
 }
 
 //! Most of the data needed about an atom
@@ -236,54 +314,55 @@ struct GraphData {
 };
 
 //! Computes the total dimension of atom features based on the property lists
-size_t compute_atom_dim(const at::Tensor& atom_property_list_onehot, const at::Tensor& atom_property_list_float);
+CUIK_EXPORT size_t compute_atom_dim(const py::array_t<int64_t>& atom_property_list_onehot,
+                                    const py::array_t<int64_t>& atom_property_list_float);
 
 //! Computes the total dimension of bond features based on the property list
-size_t compute_bond_dim(const at::Tensor& bond_property_list);
+CUIK_EXPORT size_t compute_bond_dim(const py::array_t<int64_t>& bond_property_list);
 
 //! This is called from Python to list atom one-hot features in a format that will be faster
 //! to interpret inside `mol_featurizer`, passed in the `atom_property_list_onehot` parameter.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-at::Tensor atom_onehot_feature_names_to_tensor(const std::vector<std::string>& features);
+CUIK_EXPORT py::array_t<int64_t> atom_onehot_feature_names_to_array(const std::vector<std::string>& features);
 
 //! This is called from Python to list all atom one-hot features.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-std::vector<std::string> list_all_atom_onehot_features();
+CUIK_EXPORT std::vector<std::string> list_all_atom_onehot_features();
 
 //! This is called from Python to list atom float features in a format that will be faster
 //! to interpret inside `mol_featurizer`, passed in the `atom_property_list_float` parameter.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-at::Tensor atom_float_feature_names_to_tensor(const std::vector<std::string>& features);
+CUIK_EXPORT py::array_t<int64_t> atom_float_feature_names_to_array(const std::vector<std::string>& features);
 
 //! This is called from Python to list all atom float features.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-std::vector<std::string> list_all_atom_float_features();
+CUIK_EXPORT std::vector<std::string> list_all_atom_float_features();
 
 //! This is called from Python to list bond features in a format that will be faster
 //! to interpret inside `mol_featurizer`, passed in the `bond_property_list` parameter.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-at::Tensor bond_feature_names_to_tensor(const std::vector<std::string>& features);
+CUIK_EXPORT py::array_t<int64_t> bond_feature_names_to_array(const std::vector<std::string>& features);
 
 //! This is called from Python to list all bond features.
-//! Implemented in features.cpp, but declared here so that cuik_molmaker.cpp can expose them to
+//! Implemented in features.cpp, but declared here so that cuik_molmaker_cpp.cpp can expose them to
 //! Python via pybind.
-std::vector<std::string> list_all_bond_features();
+CUIK_EXPORT std::vector<std::string> list_all_bond_features();
 
-//! `mol_featurizer` is called from Python to get feature tensors for `smiles_string`.
+//! `mol_featurizer` is called from Python to get feature arrays for `smiles_string`.
 //!
 //! @param smiles_string SMILES string of the molecule to featurize
-//! @param atom_property_list_onehot Torch `Tensor` returned by
-//!                                  `atom_onehot_feature_names_to_tensor` representing the
+//! @param atom_property_list_onehot NumPy/pybind array returned by
+//!                                  `atom_onehot_feature_names_to_array` representing the
 //!                                  list of one-hot atom features to create.
-//! @param atom_property_list_float Torch `Tensor` returned by
-//!                                 `atom_float_feature_names_to_tensor` representing the
+//! @param atom_property_list_float NumPy/pybind array returned by
+//!                                 `atom_float_feature_names_to_array` representing the
 //!                                 list of float atom features to create.
-//! @param bond_property_list Torch `Tensor` returned by `bond_feature_names_to_tensor`
+//! @param bond_property_list NumPy/pybind array returned by `bond_feature_names_to_array`
 //!                           representing the list of bond features to create.
 //! @param explicit_H If true, implicit hydrogen atoms will be added explicitly
 //!                   before featurizing.
@@ -293,22 +372,22 @@ std::vector<std::string> list_all_bond_features();
 //!                      self-edges.
 //! @param offset_carbon If true, some atom float features will subtract a
 //!                      value representing carbon, so that carbon atoms would have value zero.
-//! @return A vector of torch `Tensor`s for the features.  The first tensor is the atom features
-//!         tensor, `num_atoms` by the number of values required for all one-hot and float atom
-//!         features.  The second tensor is the bond features tensor, `num_edges` (or
+//! @return A vector of torch NumPy/pybind arrays for the features.  The first array is the atom features
+//!         array, `num_atoms` by the number of values required for all one-hot and float atom
+//!         features.  The second array is the bond features array, `num_edges` (or
 //!         `2*num_edges` if `duplicate_edges` is true) by the number of values required for all
-//!         bond features. The third tensor is a 2 by `num_edges` (or `2*num_edges` if
+//!         bond features. The third array is a 2 by `num_edges` (or `2*num_edges` if
 //!         `duplicate_edges` is true) representing the indices of the nodes each edge is
-//!         connected to. The fourth tensor is a 1 by `num_edges` tensor representing the reverse
-//!         of the third tensor. The fifth tensor is a 1 by `num_atoms` tensor containing 0s.
-std::vector<at::Tensor> mol_featurizer(const std::string& smiles_string,
-                                       const at::Tensor&  atom_property_list_onehot,
-                                       const at::Tensor&  atom_property_list_float,
-                                       const at::Tensor&  bond_property_list,
-                                       bool               explicit_H,
-                                       bool               offset_carbon,
-                                       bool               duplicate_edges,
-                                       bool               add_self_loop);
+//!         connected to. The fourth array is a 1 by `num_edges` array representing the reverse
+//!         of the third array. The fifth array is a 1 by `num_atoms` array containing 0s.
+CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
+                                                  const py::array_t<int64_t>& atom_property_list_onehot,
+                                                  const py::array_t<int64_t>& atom_property_list_float,
+                                                  const py::array_t<int64_t>& bond_property_list,
+                                                  bool                        explicit_H,
+                                                  bool                        offset_carbon,
+                                                  bool                        duplicate_edges,
+                                                  bool                        add_self_loop);
 
 //! Creates an RWMol from a SMILES string.
 //!
@@ -317,20 +396,20 @@ std::vector<at::Tensor> mol_featurizer(const std::string& smiles_string,
 //! to this explicit order, and the bookmarks will be removed, so that canonical orders
 //! can be correctly compared later.
 //!
-//! This is implemented in cuik_molmaker.cpp, but is declared in this header so
+//! This is implemented in cuik_molmaker_cpp.cpp, but is declared in this header so
 //! that both labels.cpp and features.cpp can call it.
 std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool explicit_H, bool ordered = true);
 
-//! `batch_mol_featurizer` is called from Python to get feature tensors for `smiles_list`.
+//! `batch_mol_featurizer` is called from Python to get feature arrays for `smiles_list`.
 //!
 //! @param smiles_list List of SMILES strings of molecules to featurize
-//! @param atom_property_list_onehot Torch `Tensor` returned by
-//!                                  `atom_onehot_feature_names_to_tensor` representing the
+//! @param atom_property_list_onehot NumPy/pybind array returned by
+//!                                  `atom_onehot_feature_names_to_array` representing the
 //!                                  list of one-hot atom features to create.
-//! @param atom_property_list_float Torch `Tensor` returned by
-//!                                 `atom_float_feature_names_to_tensor` representing the
+//! @param atom_property_list_float NumPy/pybind array returned by
+//!                                 `atom_float_feature_names_to_array` representing the
 //!                                 list of float atom features to create.
-//! @param bond_property_list Torch `Tensor` returned by `bond_feature_names_to_tensor`
+//! @param bond_property_list NumPy/pybind array returned by `bond_feature_names_to_array`
 //!                           representing the list of bond features to create.
 //! @param explicit_H If true, implicit hydrogen atoms will be added explicitly
 //!                   before featurizing.
@@ -340,20 +419,20 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
 //!                      value representing carbon, so that carbon atoms would have value zero.
 //! @param add_self_loop If true, bond features will have values stored for
 //!                      self-edges.
-//! @return A vector of torch `Tensor`s for the features.  The first tensor is the atom features
-//!         tensor, total number of atoms  by the number of values required for all one-hot and
-//!         float atom features.  The second tensor is the bond features tensor, total number of
+//! @return A vector of NumPy/pybind arrays for the features.  The first array is the atom features
+//!         array, total number of atoms  by the number of values required for all one-hot and
+//!         float atom features.  The second array is the bond features array, total number of
 //!         edges (or `2*total_num_edges` if `duplicate_edges` is true) by the number of values
-//!         required for all bond features. The third tensor is a 2 by `total_num_edges` (or
+//!         required for all bond features. The third array is a 2 by `total_num_edges` (or
 //!         `2*total_num_edges` if `duplicate_edges` is true) representing the indices of the
-//!         nodes each edge is connected to. The fourth tensor is a 1 by `total_num_edges`
-//!         tensor representing the reverse of the third tensor. The fifth tensor is a 1 by
-//!         `total_num_atoms` tensor containing the index of the molecule each atom belongs to.
-std::vector<at::Tensor> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
-                                             const at::Tensor&               atom_property_list_onehot,
-                                             const at::Tensor&               atom_property_list_float,
-                                             const at::Tensor&               bond_property_list,
-                                             bool                            explicit_H,
-                                             bool                            offset_carbon,
-                                             bool                            duplicate_edges,
-                                             bool                            add_self_loop);
+//!         nodes each edge is connected to. The fourth array is a 1 by `total_num_edges`
+//!         array representing the reverse of the third array. The fifth array is a 1 by
+//!         `total_num_atoms` array containing the index of the molecule each atom belongs to.
+CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
+                                                        const py::array_t<int64_t>&     atom_property_list_onehot,
+                                                        const py::array_t<int64_t>&     atom_property_list_float,
+                                                        const py::array_t<int64_t>&     bond_property_list,
+                                                        bool                            explicit_H,
+                                                        bool                            offset_carbon,
+                                                        bool                            duplicate_edges,
+                                                        bool                            add_self_loop);
