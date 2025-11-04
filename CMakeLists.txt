@@ -267,12 +267,12 @@ else()
             BUILD_WITH_INSTALL_RPATH TRUE
         )
     else()
-        # TODO: Need to figure this out for Windows
-        # On Windows, DLLs should be in the same directory or on PATH
-        # No RPATH needed, but we can set output directory
-        # set_target_properties(cuik_molmaker_core PROPERTIES
-        #     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-        # )
+        # Windows: No RPATH equivalent exists
+        # setup.py will place cuik_molmaker_core.dll in the same directory as the .pyd
+        # so Windows will find it automatically
+        set_target_properties(cuik_molmaker_core PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        )
     endif(APPLE OR UNIX)
 endif(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
 
@@ -297,12 +297,12 @@ if(APPLE)
         INSTALL_RPATH "${rpath_entries}"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
-# elseif(WIN32)
+elseif(WIN32)
     # On Windows, do not set INSTALL_RPATH/BUILD_WITH_INSTALL_RPATH.
-    # Instead, ensure that the DLLs are either (1) in the same directory as the .pyd,
-    # or (2) on PATH at runtime. This is necessary so cuik_molmaker_cpp can find its dependencies.
-    # Optionally, copy dependent DLLs to the output directory if needed.
-    # No RPATH equivalent for Windows.
+    # Instead, ensure that the DLLs are in the same directory as the .pyd.
+    # setup.py places cuik_molmaker_core.dll in the same directory as the .pyd file,
+    # so Windows will find it automatically without any special path configuration.
+    # No RPATH equivalent exists on Windows.
 else()
     # Linux: Use $ORIGIN to find .so in lib/ subdirectory
     set_target_properties(cuik_molmaker_cpp PROPERTIES
