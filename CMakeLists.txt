@@ -36,10 +36,12 @@ cmake_dependent_option(
 # Set RPATH settings
 # Note: Target-specific RPATH settings are configured below for each library
 # to use $ORIGIN relative paths for portability in conda environments
-set(CMAKE_SKIP_BUILD_RPATH FALSE)
-set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-# Don't set a global CMAKE_INSTALL_RPATH here - let target-specific settings handle it
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+if(APPLE or UNIX)
+    set(CMAKE_SKIP_BUILD_RPATH FALSE)
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+    # Don't set a global CMAKE_INSTALL_RPATH here - let target-specific settings handle it
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+endif()
 
 if(CUIKMOLMAKER_CXX11_ABI)
   message(STATUS "Using cxx11 ABI")
