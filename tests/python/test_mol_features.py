@@ -1,13 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved. # noqa: E501
 # SPDX-License-Identifier: Apache-2.0
 
-import os
+import json
+from importlib.resources import files
 
 import numpy as np
 import pytest
+from rdkit import Chem
 
 from cuik_molmaker import MoleculeFeaturizer
-from cuik_molmaker.utils.descriptor_normalization import DESCRIPTASTORUS_DESC_LIST
+from cuik_molmaker.utils.descriptor_normalization import (
+    DESCRIPTASTORUS_DESC_LIST,
+    get_normalization_functions,
+)
 
 
 def test_rdkit2D_some_props(smiles_list_100, test_data_path):
@@ -23,7 +28,7 @@ def test_rdkit2D_some_props(smiles_list_100, test_data_path):
 
 
 @pytest.mark.parametrize("normalization_type", ["none", "fast", "best"])
-def test_rdkit2D(smiles_list_100, normalization_type, test_data_path):
+def test_rdkit2D(smiles_list_100, normalization_type):
 
     if normalization_type == "none":
         featurizer = MoleculeFeaturizer(molecular_descriptor_type="rdkit2D")
@@ -33,33 +38,40 @@ def test_rdkit2D(smiles_list_100, normalization_type, test_data_path):
             rdkit2D_normalization_type=normalization_type,
         )
 
-    ref_file = os.path.join(
-        test_data_path, f"rdkit2D_{normalization_type}_normalization_ref.npy"
-    )
-    desc_ref = np.load(ref_file)
+    desc_list = featurizer.rdkit2D_descriptor_list
+    rows = []
+    for smi in smiles_list_100:
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            rows.append([np.nan] * len(desc_list))
+        else:
+            rows.append([func(mol) for _, func in desc_list])
+    desc_ref = np.array(rows)
+
+    if normalization_type != "none":
+        # Load the same normalization params and apply the same per-column
+        # transform as MoleculeFeaturizer._normalize_rdkit2D_descriptors.
+        norm_params_path = files("cuik_molmaker").joinpath(
+            "data", f"{normalization_type}_normalization_params.json"
+        )
+        with norm_params_path.open("r", encoding="utf-8") as f:
+            norm_params = json.load(f)
+        desc_names = [d[0] for d in desc_list]
+        norm_fn_dict = get_normalization_functions(desc_names, norm_params)
+        norm_desc = np.zeros_like(desc_ref, dtype=np.float64)
+        for i, name in enumerate(desc_names):
+            norm_desc[:, i] = norm_fn_dict[name](desc_ref[:, i])
+        desc_ref = norm_desc
 
     desc = featurizer.featurize(smiles_list_100)
 
-    # Bertz CT descriptor RDKit is not backward compatible
-    # https://www.rdkit.org/docs/source/rdkit.Chem.GraphDescriptors.html#rdkit.Chem.GraphDescriptors.BertzCT
-    problem_idx_list = [
-        [d[0] for d in featurizer.rdkit2D_descriptor_list].index("BertzCT")
-    ]
-    if normalization_type == "best":
-        # TODO: Unstable genhyperbolic normalization function parameters
-        # TODO: Remove this.
-        problem_idx_list.append(
-            [d[0] for d in featurizer.rdkit2D_descriptor_list].index("EState_VSA5")
-        )
-    for problem_idx in problem_idx_list:
-        desc[:, problem_idx] = desc_ref[:, problem_idx]
     np.testing.assert_allclose(
         desc_ref, desc, atol=1e-4
     ), f"RDKit 2D descriptor generation and normalization type {normalization_type} "
     "do not match reference"
 
 
-def test_rdkit2D_descriptastorus(smiles_list_100, test_data_path):
+def test_rdkit2D_descriptastorus(smiles_list_100):
 
     normalization_type = "descriptastorus"
     featurizer = MoleculeFeaturizer(
@@ -68,23 +80,31 @@ def test_rdkit2D_descriptastorus(smiles_list_100, test_data_path):
         rdkit2D_normalization_type=normalization_type,
     )
 
-    ref_file = os.path.join(
-        test_data_path, f"rdkit2D_{normalization_type}_normalization_ref.npy"
+    # Build the reference live from RDKit by mirroring the steps in
+    # MoleculeFeaturizer.compute_rdkit2D_descriptors (src/mol_features.py).
+    desc_list = featurizer.rdkit2D_descriptor_list
+    rows = []
+    for smi in smiles_list_100:
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            rows.append([np.nan] * len(desc_list))
+        else:
+            rows.append([func(mol) for _, func in desc_list])
+    desc_ref = np.array(rows)
+
+    norm_params_path = files("cuik_molmaker").joinpath(
+        "data", f"{normalization_type}_normalization_params.json"
     )
-    desc_ref = np.load(ref_file)
+    with norm_params_path.open("r", encoding="utf-8") as f:
+        norm_params = json.load(f)
+    desc_names = [d[0] for d in desc_list]
+    norm_fn_dict = get_normalization_functions(desc_names, norm_params)
+    norm_desc = np.zeros_like(desc_ref, dtype=np.float64)
+    for i, name in enumerate(desc_names):
+        norm_desc[:, i] = norm_fn_dict[name](desc_ref[:, i])
+    desc_ref = norm_desc
 
     desc = featurizer.featurize(smiles_list_100)
-
-    # The implementation of descriptor normalization for fr_unbrch_alkane does not match
-    # the reference. Normalization function parameters are very precision sensitive.
-    # Bertz CT implementation is not backward compatible:
-    # https://www.rdkit.org/docs/source/rdkit.Chem.GraphDescriptors.html#rdkit.Chem.GraphDescriptors.BertzCT
-    problem_idx_list = [
-        DESCRIPTASTORUS_DESC_LIST.index("fr_unbrch_alkane"),
-        DESCRIPTASTORUS_DESC_LIST.index("BertzCT"),
-    ]
-    for problem_idx in problem_idx_list:
-        desc[:, problem_idx] = desc_ref[:, problem_idx]
 
     np.testing.assert_allclose(
         desc_ref, desc, atol=1e-4

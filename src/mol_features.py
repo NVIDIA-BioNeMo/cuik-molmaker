@@ -4,10 +4,10 @@
 import argparse
 import json
 import time
+from importlib.resources import files
 
 import numpy as np
 import pandas as pd
-import pkg_resources
 from rdkit import Chem
 from rdkit.Chem import Descriptors
 
@@ -83,13 +83,11 @@ class MoleculeFeaturizer:
                 self.rdkit2D_normalization_type = None
 
             if self.rdkit2D_normalization_type is not None:
-                with open(
-                    pkg_resources.resource_filename(
-                        "cuik_molmaker",
-                        f"data/{self.rdkit2D_normalization_type}_"
-                        "normalization_params.json",
-                    )
-                ) as f:
+                resource = files("cuik_molmaker").joinpath(
+                    "data",
+                    f"{self.rdkit2D_normalization_type}_normalization_params.json",
+                )
+                with resource.open("r", encoding="utf-8") as f:
                     norm_params = json.load(f)
                 rdkit2D_desc_name_list = [d[0] for d in self.rdkit2D_descriptor_list]
                 self.rdkit2D_normalization_fn_dict = get_normalization_functions(
