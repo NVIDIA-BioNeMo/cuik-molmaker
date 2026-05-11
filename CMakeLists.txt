@@ -104,7 +104,7 @@ find_package(pybind11 2.13 REQUIRED)
 
 if(NOT CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
     # Find Boost package
-    find_package(Boost REQUIRED COMPONENTS system serialization iostreams)
+    find_package(Boost REQUIRED COMPONENTS serialization iostreams OPTIONAL_COMPONENTS system)
     message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
     message(STATUS "Boost_LIBRARIES: ${Boost_LIBRARIES}")
     message(STATUS "Building against system RDKit from conda")
