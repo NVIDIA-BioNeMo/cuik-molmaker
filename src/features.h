@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 // RDKit headers
@@ -313,6 +314,39 @@ struct GraphData {
   std::unique_ptr<RDKit::RWMol> mol;
 };
 
+//! Condensed Graph of Reaction featurization modes, matching chemprop's RxnMode enum
+enum class ReactionMode {
+  REAC_DIFF,          //!< First half = reactant feats; second half = prod - reac diff
+  REAC_PROD,          //!< First half = reactant feats; second half = product feats
+  PROD_DIFF,          //!< First half = product feats;  second half = prod - reac diff
+  REAC_DIFF_BALANCE,  //!< Like REAC_DIFF but unmatched atoms copy own feats (diff = 0)
+  REAC_PROD_BALANCE,  //!< Like REAC_PROD but unmatched atoms copy own feats
+  PROD_DIFF_BALANCE,  //!< Like PROD_DIFF but unmatched atoms copy own feats
+  UNKNOWN
+};
+
+//! Data representing a reaction (two molecules + atom correspondence) before CGR featurization.
+//! Both GraphData members retain their RDKit mol pointers — required by one_hot.cpp features.
+struct CompactReaction {
+  GraphData reac;  //!< Reactant side (owns RDKit mol + CompactAtom/Bond caches)
+  GraphData prod;  //!< Product side
+
+  //! Atom mapping: reactant atom index → product atom index (built from atom-map numbers)
+  std::unordered_map<uint32_t, uint32_t> r2p_idx_map;
+  //! Inverse: product atom index → reactant atom index
+  std::unordered_map<uint32_t, uint32_t> p2r_idx_map;
+
+  //! Reactant atoms with no matching product atom (map num absent on product side)
+  std::vector<uint32_t> reac_only_idxs;
+  //! Product atoms with no matching reactant atom; these become CGR nodes n_reac..n_cgr-1
+  std::vector<uint32_t> prod_only_idxs;
+
+  //! Bond lookup for O(1) cross-referencing. Key = (min_atom_idx << 32) | max_atom_idx
+  //! using the *side-local* (reactant or product) atom indices.
+  std::unordered_map<uint64_t, uint32_t> reac_bond_lookup;
+  std::unordered_map<uint64_t, uint32_t> prod_bond_lookup;
+};
+
 //! Computes the total dimension of atom features based on the property lists
 CUIK_EXPORT size_t compute_atom_dim(const py::array_t<int64_t>& atom_property_list_onehot,
                                     const py::array_t<int64_t>& atom_property_list_float);
@@ -436,3 +470,38 @@ CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::s
                                                         bool                            offset_carbon,
                                                         bool                            duplicate_edges,
                                                         bool                            add_self_loop);
+
+//! Parses one side of a reaction SMILES into an RWMol, preserving atom-map numbers.
+//! Unlike parse_mol, this function does NOT clear atom-map numbers and does NOT reorder atoms.
+//! @param keep_h  If true, SmilesParserParams.removeHs = false (retains explicit [H:n] atoms)
+//! @param add_h   If true, RDKit::MolOps::addHs is called after parsing (adds unmapped Hs)
+std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles, bool keep_h, bool add_h);
+
+//! Parses a reaction SMILES pair into a CompactReaction (atom correspondence + both GraphData).
+//! Both reac_smi and prod_smi must contain atom-map numbers.
+//! keep_h / add_h semantics match chemprop's _ReactionDatapointMixin.from_smi exactly.
+CUIK_EXPORT CompactReaction parse_reaction(const std::string& reac_smi,
+                                           const std::string& prod_smi,
+                                           bool               keep_h,
+                                           bool               add_h);
+
+//! Converts reaction mode name strings to a NumPy int64 array (mirrors atom_onehot_feature_names_to_array).
+CUIK_EXPORT py::array_t<int64_t> reaction_mode_names_to_array(const std::vector<std::string>& modes);
+
+//! Featurizes a batch of reactions as Condensed Graphs of Reaction (CGR).
+//! Mirrors batch_mol_featurizer in interface and return convention (5 arrays).
+//! @param reac_smiles_list  Reactant SMILES (atom-mapped); parallel to prod_smiles_list
+//! @param prod_smiles_list  Product SMILES (atom-mapped)
+//! @param keep_h  If true, retain explicit mapped [H:n] atoms (required for E2/SN2)
+//! @param add_h   If true, add unmapped Hs via RDKit::MolOps::addHs (after parsing)
+//! @param mode    CGR featurization mode (which combination of reac/prod/diff)
+//! @return 5 arrays: [atom_feats, bond_feats, edge_index, rev_edge_index, batch]
+CUIK_EXPORT std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>& reac_smiles_list,
+                                                             const std::vector<std::string>& prod_smiles_list,
+                                                             const py::array_t<int64_t>&     atom_property_list_onehot,
+                                                             const py::array_t<int64_t>&     atom_property_list_float,
+                                                             const py::array_t<int64_t>&     bond_property_list,
+                                                             bool                            keep_h,
+                                                             bool                            add_h,
+                                                             bool                            offset_carbon,
+                                                             ReactionMode                    mode);

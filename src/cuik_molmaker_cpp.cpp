@@ -64,4 +64,31 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.def("list_all_atom_float_features", &list_all_atom_float_features, "Returns a list of all atom float features.");
 
   m.def("list_all_bond_features", &list_all_bond_features, "Returns a list of all bond features.");
+
+  // Reaction featurization (CGR)
+  m.def("reaction_mode_names_to_array",
+        &reaction_mode_names_to_array,
+        "Convert reaction mode name strings to int64 array (mirrors atom_onehot_feature_names_to_array).");
+  m.def(
+    "batch_reaction_featurizer",
+    [](const std::vector<std::string>& reac_smiles_list,
+       const std::vector<std::string>& prod_smiles_list,
+       const py::array_t<int64_t>&     atom_property_list_onehot,
+       const py::array_t<int64_t>&     atom_property_list_float,
+       const py::array_t<int64_t>&     bond_property_list,
+       bool                            keep_h,
+       bool                            add_h,
+       bool                            offset_carbon,
+       int64_t                         mode_int) {
+      return batch_reaction_featurizer(reac_smiles_list,
+                                       prod_smiles_list,
+                                       atom_property_list_onehot,
+                                       atom_property_list_float,
+                                       bond_property_list,
+                                       keep_h,
+                                       add_h,
+                                       offset_carbon,
+                                       ReactionMode(mode_int));
+    },
+    "Featurize a batch of reactions (CGR) and return 5 NumPy arrays.");
 }

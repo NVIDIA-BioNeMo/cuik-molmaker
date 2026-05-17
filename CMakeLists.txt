@@ -202,6 +202,7 @@ add_library(cuik_molmaker_core SHARED
     src/features.cpp
     src/float_features.cpp
     src/one_hot.cpp
+    src/reaction_features.cpp
 )
 
 # Add include directories for core library
