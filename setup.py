@@ -13,11 +13,26 @@ import sysconfig
 from setuptools import find_packages, setup
 from setuptools.command.build_ext import build_ext
 
+# Version for the cuik_molmaker package (cuik_molmaker_pin uses RDKIT_VERSION instead).
+CUIK_MOLMAKER_VERSION = "0.2.1"
+
 # Set global vars
 RDKIT_VERSION = os.environ.get("RDKIT_VERSION")
 PYTHON_VERSION = os.environ.get("PYTHON_VERSION")
 CXX11_ABI = os.environ.get("CUIKMOLMAKER_CXX11_ABI")
+PUBLISH_TARGET = os.environ.get("PUBLISH_TARGET", "nvidia_pypi")
 SYSTEM = platform.system()
+
+# PUBLISH_TARGET controls the distribution name and version of the wheel:
+#   - "nvidia_pypi" -> name="cuik_molmaker",     version=CUIK_MOLMAKER_VERSION
+#   - "pypi"        -> name="cuik_molmaker_pin", version=RDKIT_VERSION
+SUPPORTED_PUBLISH_TARGETS = ("nvidia_pypi", "pypi")
+if PUBLISH_TARGET not in SUPPORTED_PUBLISH_TARGETS:
+    print(
+        f"Error: Unsupported PUBLISH_TARGET={PUBLISH_TARGET!r}. "
+        f"Must be one of {SUPPORTED_PUBLISH_TARGETS}."
+    )
+    sys.exit(1)
 
 
 class CMakeBuild(build_ext):
@@ -166,10 +181,22 @@ config["bdist_wheel"]["plat_name"] = sysconfig.get_platform()
 with open("setup.cfg", "w") as f:
     config.write(f)
 
+if PUBLISH_TARGET == "pypi":
+    PACKAGE_NAME = "cuik_molmaker_pin"
+    PACKAGE_VERSION = RDKIT_VERSION
+elif PUBLISH_TARGET == "nvidia_pypi":
+    PACKAGE_NAME = "cuik_molmaker"
+    PACKAGE_VERSION = CUIK_MOLMAKER_VERSION
+else:
+    raise ValueError(f"Unsupported PUBLISH_TARGET: {PUBLISH_TARGET}")
+
 print(
     f"Building with RDKIT_VERSION={RDKIT_VERSION}, "
     f"PYTHON_VERSION={PYTHON_VERSION}, "
-    f"CXX11_ABI={CXX11_ABI}"
+    f"CXX11_ABI={CXX11_ABI}, "
+    f"PUBLISH_TARGET={PUBLISH_TARGET}, "
+    f"PACKAGE_NAME={PACKAGE_NAME}, "
+    f"PACKAGE_VERSION={PACKAGE_VERSION}"
 )
 
 # Create package directory structure first
@@ -242,8 +269,8 @@ if not os.path.exists(lib_init_file):
 
 
 setup(
-    name="cuik_molmaker",
-    version="0.2",
+    name=PACKAGE_NAME,
+    version=PACKAGE_VERSION,
     author="S. Veccham",
     author_email="sveccham@nvidia.com",
     description="C++ module for featurizing molecules",
