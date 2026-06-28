@@ -90,5 +90,6 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
                                        offset_carbon,
                                        ReactionMode(mode_int));
     },
-    "Featurize a batch of reactions (CGR) and return 5 NumPy arrays.");
+    "Accepts lists of reactant and product SMILES strings and returns a list of NumPy arrays "
+    "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions.");
 }
