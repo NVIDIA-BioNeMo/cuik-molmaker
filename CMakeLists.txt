@@ -290,9 +290,18 @@ target_link_libraries(cuik_molmaker_cpp PRIVATE
 )
 
 # Set RPATH for the Python module - platform specific
+# The compiled module links the RDKit/Boost libraries directly, so its own RPATH
+# must point at them. When building against pip RDKit those libraries live in the
+# sibling "rdkit.libs" directory (site-packages/rdkit.libs), one level above the
+# module (site-packages/cuik_molmaker). Modern toolchains emit DT_RUNPATH, which is
+# NOT used to resolve transitive dependencies, so the runpath on the core library
+# alone is not sufficient and we must add rdkit.libs here as well.
 if(APPLE)
     # macOS: Use @loader_path to find dylib in lib/ subdirectory
     set(rpath_entries "@loader_path/lib")
+    if(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+        list(APPEND rpath_entries "@loader_path/../rdkit.libs")
+    endif()
 
     set_target_properties(cuik_molmaker_cpp PROPERTIES
         INSTALL_RPATH "${rpath_entries}"
@@ -306,8 +315,13 @@ if(APPLE)
     # No RPATH equivalent for Windows.
 else()
     # Linux: Use $ORIGIN to find .so in lib/ subdirectory
+    set(rpath_entries "$ORIGIN/lib")
+    if(CUIKMOLMAKER_BUILD_AGAINST_PIP_RDKIT)
+        list(APPEND rpath_entries "$ORIGIN/../rdkit.libs")
+    endif()
+    list(APPEND rpath_entries "$ORIGIN/../../../")
     set_target_properties(cuik_molmaker_cpp PROPERTIES
-        INSTALL_RPATH "$ORIGIN/lib;$ORIGIN/../../../"
+        INSTALL_RPATH "${rpath_entries}"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
 endif()
