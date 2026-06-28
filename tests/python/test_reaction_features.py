@@ -10,7 +10,6 @@ import pytest
 
 import cuik_molmaker
 
-
 REACTION_MODES = [
     "REAC_DIFF",
     "REAC_PROD",
@@ -24,20 +23,38 @@ REACTION_MODES = [
 # RIGR uses reduced atom AND bond features (bond_fdim=2 each, 4 total in CGR).
 FEATURIZER_CONFIGS = {
     "V1": {
-        "atom_onehot": ["atomic-number", "total-degree", "formal-charge",
-                        "chirality", "num-hydrogens", "hybridization"],
+        "atom_onehot": [
+            "atomic-number",
+            "total-degree",
+            "formal-charge",
+            "chirality",
+            "num-hydrogens",
+            "hybridization",
+        ],
         "atom_float": ["aromatic", "mass"],
         "bond": ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"],
     },
     "V2": {
-        "atom_onehot": ["atomic-number-common", "total-degree", "formal-charge",
-                        "chirality", "num-hydrogens", "hybridization-expanded"],
+        "atom_onehot": [
+            "atomic-number-common",
+            "total-degree",
+            "formal-charge",
+            "chirality",
+            "num-hydrogens",
+            "hybridization-expanded",
+        ],
         "atom_float": ["aromatic", "mass"],
         "bond": ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"],
     },
     "ORGANIC": {
-        "atom_onehot": ["atomic-number-organic", "total-degree", "formal-charge",
-                        "chirality", "num-hydrogens", "hybridization-organic"],
+        "atom_onehot": [
+            "atomic-number-organic",
+            "total-degree",
+            "formal-charge",
+            "chirality",
+            "num-hydrogens",
+            "hybridization-organic",
+        ],
         "atom_float": ["aromatic", "mass"],
         "bond": ["is-null", "bond-type-onehot", "conjugated", "in-ring", "stereo"],
     },
@@ -51,7 +68,9 @@ FEATURIZER_CONFIGS = {
 
 @pytest.mark.parametrize("atom_featurizer_version", list(FEATURIZER_CONFIGS.keys()))
 @pytest.mark.parametrize("reaction_mode", REACTION_MODES)
-def test_batch_reaction_featurizer(test_data_path, atom_featurizer_version, reaction_mode):
+def test_batch_reaction_featurizer(
+    test_data_path, atom_featurizer_version, reaction_mode
+):
     cfg = FEATURIZER_CONFIGS[atom_featurizer_version]
     atom_onehot = cuik_molmaker.atom_onehot_feature_names_to_array(cfg["atom_onehot"])
     atom_float = cuik_molmaker.atom_float_feature_names_to_array(cfg["atom_float"])
@@ -69,29 +88,34 @@ def test_batch_reaction_featurizer(test_data_path, atom_featurizer_version, reac
         atom_onehot,
         atom_float,
         bond_feats,
-        True,   # keep_h — required for atom-mapped reactions with explicit H
+        True,  # keep_h — required for atom-mapped reactions with explicit H
         False,  # add_h
         False,  # offset_carbon
         mode_int,
     )
 
     np.testing.assert_allclose(
-        ref["V"], V,
+        ref["V"],
+        V,
         err_msg=f"[{atom_featurizer_version}/{reaction_mode}] atom feats mismatch",
     )
     np.testing.assert_allclose(
-        ref["E"], E,
+        ref["E"],
+        E,
         err_msg=f"[{atom_featurizer_version}/{reaction_mode}] bond feats mismatch",
     )
     np.testing.assert_allclose(
-        ref["edge_index"], edge_index,
+        ref["edge_index"],
+        edge_index,
         err_msg=f"[{atom_featurizer_version}/{reaction_mode}] edge_index mismatch",
     )
     np.testing.assert_allclose(
-        ref["rev_edge_index"], rev_edge_index,
+        ref["rev_edge_index"],
+        rev_edge_index,
         err_msg=f"[{atom_featurizer_version}/{reaction_mode}] rev_edge_index mismatch",
     )
     np.testing.assert_allclose(
-        ref["batch"], batch,
+        ref["batch"],
+        batch,
         err_msg=f"[{atom_featurizer_version}/{reaction_mode}] batch mismatch",
     )
