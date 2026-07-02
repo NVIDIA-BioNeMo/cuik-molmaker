@@ -86,7 +86,7 @@ prod_smiles_list = ["[CH3:1][OH:3].[Br-:2]", "[CH3:1][CH2:2][F:4].[Cl-:3]"]
 
 # Reaction mode controls how reactant/product features are combined into the CGR.
 # Available modes: REAC_DIFF (default), REAC_PROD, PROD_DIFF and their _BALANCE variants.
-mode = cuik_molmaker.reaction_mode_names_to_array(["REAC_DIFF"])[0]
+mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
 
 keep_h = True      # keep explicit (mapped) hydrogens, e.g. [H:3]
 add_h = False      # add implicit hydrogens via RDKit AddHs (per reaction side)

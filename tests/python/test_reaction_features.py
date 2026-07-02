@@ -75,7 +75,7 @@ def test_batch_reaction_featurizer(
     atom_onehot = cuik_molmaker.atom_onehot_feature_names_to_array(cfg["atom_onehot"])
     atom_float = cuik_molmaker.atom_float_feature_names_to_array(cfg["atom_float"])
     bond_feats = cuik_molmaker.bond_feature_names_to_array(cfg["bond"])
-    mode_int = cuik_molmaker.reaction_mode_names_to_array([reaction_mode])[0]
+    mode_int = cuik_molmaker.reaction_mode_to_int(reaction_mode)
 
     ref_file = f"sample_rxns_100_{atom_featurizer_version}_{reaction_mode}_ref.xz"
     ref_path = os.path.join(test_data_path, ref_file)

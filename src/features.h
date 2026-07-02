@@ -485,8 +485,8 @@ CUIK_EXPORT CompactReaction parse_reaction(const std::string& reac_smi,
                                            bool               keep_h,
                                            bool               add_h);
 
-//! Converts reaction mode name strings to a NumPy int64 array (mirrors atom_onehot_feature_names_to_array).
-CUIK_EXPORT py::array_t<int64_t> reaction_mode_names_to_array(const std::vector<std::string>& modes);
+//! Converts a reaction mode name to its integer enum value; throws std::runtime_error on an unknown name.
+CUIK_EXPORT int64_t reaction_mode_to_int(const std::string& mode);
 
 //! Featurizes a batch of reactions as Condensed Graphs of Reaction (CGR).
 //! Mirrors batch_mol_featurizer in interface and return convention (5 arrays).

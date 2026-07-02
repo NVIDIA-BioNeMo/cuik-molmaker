@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! @file CGR (Condensed Graph of Reaction) featurization.
-//! Implements parse_rxn_side_mol, parse_reaction, reaction_mode_names_to_array,
+//! Implements parse_rxn_side_mol, parse_reaction, reaction_mode_to_int,
 //! and batch_reaction_featurizer (all declared in features.h).
 
 #include <GraphMol/Atom.h>
@@ -175,7 +175,7 @@ CompactReaction parse_reaction(const std::string& reac_smi, const std::string& p
 }
 
 // ---------------------------------------------------------------------------
-// reaction_mode_names_to_array
+// reaction_mode_to_int
 // ---------------------------------------------------------------------------
 static const std::unordered_map<std::string, int64_t> rxn_mode_name_to_enum{
   {        std::string("REAC_DIFF"),         int64_t(ReactionMode::REAC_DIFF)},
@@ -186,15 +186,13 @@ static const std::unordered_map<std::string, int64_t> rxn_mode_name_to_enum{
   {std::string("PROD_DIFF_BALANCE"), int64_t(ReactionMode::PROD_DIFF_BALANCE)},
 };
 
-py::array_t<int64_t> reaction_mode_names_to_array(const std::vector<std::string>& modes) {
-  const size_t               n = modes.size();
-  std::unique_ptr<int64_t[]> out(new int64_t[n ? n : 1]);
-  for (size_t i = 0; i < n; ++i) {
-    auto it = rxn_mode_name_to_enum.find(modes[i]);
-    out[i]  = (it != rxn_mode_name_to_enum.end()) ? it->second : int64_t(ReactionMode::UNKNOWN);
-  }
-  const int64_t dims[1] = {int64_t(n)};
-  return py_array_from_array(std::move(out), dims, 1);
+int64_t reaction_mode_to_int(const std::string& mode) {
+  auto it = rxn_mode_name_to_enum.find(mode);
+  if (it == rxn_mode_name_to_enum.end())
+    throw std::runtime_error(
+      "Unknown reaction mode: '" + mode +
+      "'. Valid modes: REAC_DIFF, REAC_PROD, PROD_DIFF, REAC_DIFF_BALANCE, REAC_PROD_BALANCE, PROD_DIFF_BALANCE.");
+  return it->second;
 }
 
 // ---------------------------------------------------------------------------
@@ -411,9 +409,32 @@ static void fill_single_bond_feats(const GraphData&            gd,
       case BondFeature::CONJUGATED:
         *p++ = (!is_null && gd.bonds[bond_idx].isConjugated) ? 1.0f : 0.0f;
         break;
-      case BondFeature::TYPE_FLOAT:
-        *p++ = is_null ? 0.0f : float(gd.bonds[bond_idx].bondType);
+      case BondFeature::TYPE_FLOAT: {
+        // Mirror the molecule featurizer (float_features.cpp): map bond order to a
+        // chemically meaningful float instead of emitting the raw RDKit enum value
+        // (e.g. aromatic -> 1.5, not 12.0). Keeps mol/rxn featurizers consistent.
+        if (is_null) {
+          *p++ = 0.0f;
+        } else {
+          switch (RDKit::Bond::BondType(gd.bonds[bond_idx].bondType)) {
+            case RDKit::Bond::BondType::SINGLE:
+              *p++ = 1.0f;
+              break;
+            case RDKit::Bond::BondType::DOUBLE:
+              *p++ = 2.0f;
+              break;
+            case RDKit::Bond::BondType::TRIPLE:
+              *p++ = 3.0f;
+              break;
+            case RDKit::Bond::BondType::AROMATIC:
+              *p++ = 1.5f;
+              break;
+            default:
+              *p++ = float(gd.mol->getBondWithIdx(bond_idx)->getBondTypeAsDouble());
+          }
+        }
         break;
+      }
       default:
         *p++ = 0.0f;
         break;
@@ -604,9 +625,31 @@ std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>&
                                                  bool                            add_h,
                                                  bool                            offset_carbon,
                                                  ReactionMode                    mode) {
+  // Validate inputs up front (before the expensive per-reaction parse loop).
   if (reac_smiles_list.size() != prod_smiles_list.size())
     throw std::runtime_error("reac_smiles_list and prod_smiles_list must have the same length");
   const size_t n_rxns = reac_smiles_list.size();
+
+  if (mode == ReactionMode::UNKNOWN || int64_t(mode) < 0 || int64_t(mode) > int64_t(ReactionMode::PROD_DIFF_BALANCE))
+    throw std::runtime_error(
+      "batch_reaction_featurizer: invalid reaction mode. Use reaction_mode_to_int() with one of "
+      "REAC_DIFF, REAC_PROD, PROD_DIFF, REAC_DIFF_BALANCE, REAC_PROD_BALANCE, PROD_DIFF_BALANCE.");
+
+  // The CGR layout requires the first one-hot atom feature to be an atomic-number block:
+  //   * atomic_num_block_w (below) is its width, stripped from the CGR second half
+  //   * build_num_only() writes element identity into that block for phantom atoms
+  // Enforce this precondition explicitly rather than assuming it silently.
+  if (atom_property_list_onehot.ndim() != 1 || atom_property_list_onehot.shape(0) == 0)
+    throw std::runtime_error(
+      "batch_reaction_featurizer: at least one one-hot atom feature is required, and the first "
+      "must be an atomic-number feature (atomic-number, atomic-number-common, atomic-number-organic).");
+  const auto first_onehot = AtomOneHotFeature(static_cast<const int64_t*>(atom_property_list_onehot.data())[0]);
+  if (first_onehot != AtomOneHotFeature::ATOMIC_NUM && first_onehot != AtomOneHotFeature::ATOMIC_NUM_COMMON &&
+      first_onehot != AtomOneHotFeature::ATOMIC_NUM_ORGANIC)
+    throw std::runtime_error(
+      "batch_reaction_featurizer: the first one-hot atom feature must be an atomic-number feature "
+      "(atomic-number, atomic-number-common, or atomic-number-organic); the CGR layout strips this "
+      "block from the second half of each atom feature vector.");
 
   // Parse all reactions
   std::vector<CompactReaction> reactions;
@@ -616,17 +659,12 @@ std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>&
 
   // Feature dimensions
   const size_t single_atom_fdim   = compute_atom_dim(atom_property_list_onehot, atom_property_list_float);
-  // atomic_num_block_w = size of the atomic-num one-hot block (including "other" slot)
-  // = get_one_hot_atom_feature_size(first_onehot_feature)
-  size_t       atomic_num_block_w = 0;
-  if (atom_property_list_onehot.ndim() == 1 && atom_property_list_onehot.shape(0) > 0) {
-    auto f             = AtomOneHotFeature(static_cast<const int64_t*>(atom_property_list_onehot.data())[0]);
-    atomic_num_block_w = get_one_hot_atom_feature_size(f);
-  }
-  const size_t second_atom_len  = single_atom_fdim - atomic_num_block_w;
-  const size_t cgr_atom_fdim    = single_atom_fdim + second_atom_len;
-  const size_t single_bond_fdim = compute_bond_dim(bond_property_list);
-  const size_t cgr_bond_fdim    = 2 * single_bond_fdim;
+  // atomic_num_block_w = size of the atomic-num one-hot block (including "other" slot).
+  const size_t atomic_num_block_w = get_one_hot_atom_feature_size(first_onehot);
+  const size_t second_atom_len    = single_atom_fdim - atomic_num_block_w;
+  const size_t cgr_atom_fdim      = single_atom_fdim + second_atom_len;
+  const size_t single_bond_fdim   = compute_bond_dim(bond_property_list);
+  const size_t cgr_bond_fdim      = 2 * single_bond_fdim;
 
   // Total CGR atom count across all reactions
   size_t total_cgr_atoms = 0;

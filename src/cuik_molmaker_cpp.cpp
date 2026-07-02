@@ -66,9 +66,9 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.def("list_all_bond_features", &list_all_bond_features, "Returns a list of all bond features.");
 
   // Reaction featurization (CGR)
-  m.def("reaction_mode_names_to_array",
-        &reaction_mode_names_to_array,
-        "Convert reaction mode name strings to int64 array (mirrors atom_onehot_feature_names_to_array).");
+  m.def("reaction_mode_to_int",
+        &reaction_mode_to_int,
+        "Convert a reaction mode name (e.g. 'REAC_DIFF') to its integer enum value; raises on an unknown name.");
   m.def(
     "batch_reaction_featurizer",
     [](const std::vector<std::string>& reac_smiles_list,
