@@ -79,8 +79,10 @@ print(batch_features[4].shape) # (total_num_atoms,)
 
 ### For a batch of reactions (Condensed Graph of Reaction)
 ```python
-# Reactant and product SMILES must be atom-mapped (`:N` annotations) so that
-# atoms can be matched across the two sides of the reaction.
+# Reactant and product SMILES must be atom-mapped: corresponding atoms carry the
+# same `:N` map number on both sides (see the Daylight SMILES/SMIRKS spec).
+# Providing a correct, unique mapping is the caller's responsibility; duplicate
+# map numbers on a side are not validated and give an arbitrary correspondence.
 reac_smiles_list = ["[CH3:1][Br:2].[OH-:3]", "[CH3:1][CH2:2][Cl:3].[F-:4]"]
 prod_smiles_list = ["[CH3:1][OH:3].[Br-:2]", "[CH3:1][CH2:2][F:4].[Cl-:3]"]
 
@@ -88,8 +90,15 @@ prod_smiles_list = ["[CH3:1][OH:3].[Br-:2]", "[CH3:1][CH2:2][F:4].[Cl-:3]"]
 # Available modes: REAC_DIFF (default), REAC_PROD, PROD_DIFF and their _BALANCE variants.
 mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
 
-keep_h = True      # keep explicit (mapped) hydrogens, e.g. [H:3]
-add_h = False      # add implicit hydrogens via RDKit AddHs (per reaction side)
+# keep_h keeps hydrogens explicitly written in the SMILES (e.g. the mapped
+# `[H:3]`); it does not add any. Enable it when the reaction carries mapped
+# explicit hydrogens, which then match across sides by their map number.
+keep_h = True
+
+# add_h adds new hydrogens to each side via RDKit AddHs. Note: these hydrogens
+# are unmapped, so in a CGR they become reactant- or product-only phantom atoms.
+# For example, the identity reaction `[CH4:1] >> [CH4:1]` gives 9 nodes, not 5.
+add_h = False
 
 rxn_features = cuik_molmaker.batch_reaction_featurizer(
     reac_smiles_list, prod_smiles_list,

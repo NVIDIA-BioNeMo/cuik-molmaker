@@ -91,5 +91,8 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
                                        ReactionMode(mode_int));
     },
     "Accepts lists of reactant and product SMILES strings and returns a list of NumPy arrays "
-    "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions.");
+    "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions. "
+    "SMILES must be atom-mapped and providing a correct, unique mapping is the caller's "
+    "responsibility (uniqueness is not validated). keep_h keeps explicit hydrogens already in the "
+    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR.");
 }
