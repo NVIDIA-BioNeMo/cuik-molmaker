@@ -128,7 +128,9 @@ def main():
             out = os.path.join(DATA_DIR, f"sample_rxns_100_{version}_{mode}_ref.xz")
             with lzma.open(out, "wb") as f:
                 pickle.dump(ref, f)
-            print(f"wrote {os.path.basename(out)}  V={ref['V'].shape}  E={ref['E'].shape}")
+            print(
+                f"wrote {os.path.basename(out)}  V={ref['V'].shape}  E={ref['E'].shape}"
+            )
 
 
 if __name__ == "__main__":
