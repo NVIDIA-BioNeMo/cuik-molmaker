@@ -90,15 +90,11 @@ prod_smiles_list = ["[CH3:1][OH:3].[Br-:2]", "[CH3:1][CH2:2][F:4].[Cl-:3]"]
 # Available modes: REAC_DIFF (default), REAC_PROD, PROD_DIFF and their _BALANCE variants.
 mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
 
-# keep_h keeps hydrogens explicitly written in the SMILES (e.g. the mapped
-# `[H:3]`); it does not add any. Enable it when the reaction carries mapped
-# explicit hydrogens, which then match across sides by their map number.
+# keep_h keeps hydrogens that are explicitly written in the input SMILES; it does
+# not add any, it only keeps the ones already specified (e.g. a mapped `[H:3]`).
+# add_h adds new hydrogens via RDKit AddHs; these are unmapped, so for a CGR they
+# become reactant- or product-only phantom atoms and are usually not what you want.
 keep_h = True
-
-# add_h adds new hydrogens to each side via RDKit AddHs. Note: these hydrogens
-# are unmapped, so in a CGR they become reactant- or product-only phantom atoms.
-# For example, the identity reaction `[CH4:1] >> [CH4:1]` yields 9 CGR nodes
-# (1 matched carbon and 8 unmatched hydrogens) instead of a single carbon node.
 add_h = False
 
 rxn_features = cuik_molmaker.batch_reaction_featurizer(
