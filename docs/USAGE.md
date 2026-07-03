@@ -97,7 +97,8 @@ keep_h = True
 
 # add_h adds new hydrogens to each side via RDKit AddHs. Note: these hydrogens
 # are unmapped, so in a CGR they become reactant- or product-only phantom atoms.
-# For example, the identity reaction `[CH4:1] >> [CH4:1]` gives 9 nodes, not 5.
+# For example, the identity reaction `[CH4:1] >> [CH4:1]` yields 9 CGR nodes
+# (1 matched carbon and 8 unmatched hydrogens) instead of a single carbon node.
 add_h = False
 
 rxn_features = cuik_molmaker.batch_reaction_featurizer(
