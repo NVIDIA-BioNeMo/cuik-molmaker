@@ -126,11 +126,12 @@ CompactReaction parse_reaction(const std::string& reac_smi, const std::string& p
       mapno_to_prod_idx[map_num] = atom->getIdx();
   }
 
-  // Build r2p / p2r maps; classify reactant atoms as matched or reac-only
-  std::unordered_map<uint32_t, uint32_t> r2p_idx_map, p2r_idx_map;
-  std::vector<uint32_t>                  reac_only_idxs;
-  r2p_idx_map.reserve(n_reac_atoms);
-  p2r_idx_map.reserve(n_reac_atoms);
+  // Build r2p / p2r maps; classify reactant atoms as matched or reac-only.
+  // Atom indices are dense (0..n-1), so use flat vectors with a NO_IDX sentinel
+  // instead of hash maps: cheaper to populate, better cache behavior on lookup.
+  std::vector<uint32_t> r2p_idx_map(n_reac_atoms, NO_IDX);
+  std::vector<uint32_t> p2r_idx_map(n_prod_atoms, NO_IDX);
+  std::vector<uint32_t> reac_only_idxs;
 
   for (const auto* atom : reac_mol->atoms()) {
     uint32_t r_idx   = atom->getIdx();
@@ -147,7 +148,7 @@ CompactReaction parse_reaction(const std::string& reac_smi, const std::string& p
   // Classify product atoms: those without a reactant counterpart are product-only
   std::vector<uint32_t> prod_only_idxs;
   for (const auto* atom : prod_mol->atoms()) {
-    if (p2r_idx_map.find(atom->getIdx()) == p2r_idx_map.end())
+    if (p2r_idx_map[atom->getIdx()] == NO_IDX)
       prod_only_idxs.push_back(atom->getIdx());
   }
 
@@ -312,11 +313,11 @@ static void fill_cgr_atom_features(const CompactReaction&      rxn,
 
     if (u < n_reac) {
       // Reactant atom
-      reac_feats    = reac_buf.data() + u * single_fdim;
-      auto it       = rxn.r2p_idx_map.find(uint32_t(u));
-      bool has_prod = (it != rxn.r2p_idx_map.end());
+      reac_feats        = reac_buf.data() + u * single_fdim;
+      uint32_t p_idx    = rxn.r2p_idx_map[u];
+      bool     has_prod = (p_idx != NO_IDX);
       if (has_prod) {
-        prod_feats = prod_buf.data() + it->second * single_fdim;
+        prod_feats = prod_buf.data() + p_idx * single_fdim;
       } else {
         // Reac-only: product side
         if (is_balance) {
@@ -516,8 +517,7 @@ static BondEnumResult enumerate_cgr_bonds(const CompactReaction&      rxn,
   auto get_p = [&](size_t u) -> uint32_t {
     if (u >= n_reac)
       return rxn.prod_only_idxs[u - n_reac];
-    auto it = rxn.r2p_idx_map.find(uint32_t(u));
-    return (it != rxn.r2p_idx_map.end()) ? it->second : NO_IDX;
+    return rxn.r2p_idx_map[u];
   };
 
   // Helper: look up a bond in a lookup map; returns NO_IDX if not found

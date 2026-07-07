@@ -331,10 +331,12 @@ struct CompactReaction {
   GraphData reac;  //!< Reactant side (owns RDKit mol + CompactAtom/Bond caches)
   GraphData prod;  //!< Product side
 
-  //! Atom mapping: reactant atom index → product atom index (built from atom-map numbers)
-  std::unordered_map<uint32_t, uint32_t> r2p_idx_map;
-  //! Inverse: product atom index → reactant atom index
-  std::unordered_map<uint32_t, uint32_t> p2r_idx_map;
+  //! Atom mapping: reactant atom index → product atom index (built from atom-map numbers).
+  //! Dense over reactant indices 0..n_reac-1; sized n_reac_atoms. Unmatched atoms hold NO_IDX.
+  std::vector<uint32_t> r2p_idx_map;
+  //! Inverse: product atom index → reactant atom index.
+  //! Dense over product indices 0..n_prod-1; sized n_prod_atoms. Unmatched atoms hold NO_IDX.
+  std::vector<uint32_t> p2r_idx_map;
 
   //! Reactant atoms with no matching product atom (map num absent on product side)
   std::vector<uint32_t> reac_only_idxs;
