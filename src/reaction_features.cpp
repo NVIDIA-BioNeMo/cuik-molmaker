@@ -18,6 +18,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -237,8 +238,8 @@ static void fill_all_atom_features(const GraphData&            gd,
 // All zeros except the atomic-number one-hot index for atomicNum, at offset 0.
 // Mirrors chemprop's MultiHotAtomFeaturizer.num_only(atom).
 // ---------------------------------------------------------------------------
-static void build_num_only(uint8_t atomicNum, float* out, size_t single_fdim, AtomOneHotFeature first_onehot_feat) {
-  std::fill(out, out + single_fdim, 0.0f);
+static void build_num_only(uint8_t atomicNum, std::span<float> out, AtomOneHotFeature first_onehot_feat) {
+  std::fill(out.begin(), out.end(), 0.0f);
   size_t idx = get_atomic_num_onehot_index(atomicNum, first_onehot_feat);
   out[idx]   = 1.0f;
 }
@@ -323,7 +324,7 @@ static void fill_cgr_atom_features(const CompactReaction&      rxn,
         if (is_balance) {
           prod_feats = reac_feats;  // copy own feats
         } else {
-          build_num_only(rxn.reac.atoms[u].atomicNum, num_only_prod.data(), single_fdim, first_feat);
+          build_num_only(rxn.reac.atoms[u].atomicNum, num_only_prod, first_feat);
           prod_feats = num_only_prod.data();
         }
       }
@@ -334,7 +335,7 @@ static void fill_cgr_atom_features(const CompactReaction&      rxn,
       if (is_balance) {
         reac_feats = prod_feats;  // copy own feats
       } else {
-        build_num_only(rxn.prod.atoms[p_idx].atomicNum, num_only_reac.data(), single_fdim, first_feat);
+        build_num_only(rxn.prod.atoms[p_idx].atomicNum, num_only_reac, first_feat);
         reac_feats = num_only_reac.data();
       }
     }
@@ -358,19 +359,18 @@ static void fill_cgr_atom_features(const CompactReaction&      rxn,
 }
 
 // ---------------------------------------------------------------------------
-// Internal: write one-hot + float features for a single bond into buf[0..single_bond_fdim-1].
+// Internal: write one-hot + float features for a single bond into buf.
 // bond_idx == NO_IDX means the bond doesn't exist on that side (IS_NULL featurization).
 // ---------------------------------------------------------------------------
 static void fill_single_bond_feats(const GraphData&            gd,
                                    uint32_t                    bond_idx,
-                                   float*                      buf,
-                                   size_t                      single_bond_fdim,
+                                   std::span<float>            buf,
                                    const py::array_t<int64_t>& bond_property_list) {
   const size_t   n_props = (bond_property_list.ndim() == 1) ? size_t(bond_property_list.shape(0)) : 0;
   const int64_t* props   = (n_props > 0) ? static_cast<const int64_t*>(bond_property_list.data()) : nullptr;
   const bool     is_null = (bond_idx == NO_IDX);
 
-  float* p = buf;
+  float* p = buf.data();
   for (size_t i = 0; i < n_props; ++i) {
     auto feat = BondFeature(props[i]);
     switch (feat) {
@@ -446,7 +446,6 @@ static void fill_single_bond_feats(const GraphData&            gd,
         break;
     }
   }
-  (void)single_bond_fdim;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,8 +467,8 @@ static void write_cgr_bond_feats(const CompactReaction&      rxn,
   // Fill per-side feature vectors
   std::vector<float> reac_bf(single_bond_fdim, 0.0f);
   std::vector<float> prod_bf(single_bond_fdim, 0.0f);
-  fill_single_bond_feats(rxn.reac, b_reac_idx, reac_bf.data(), single_bond_fdim, bond_property_list);
-  fill_single_bond_feats(rxn.prod, b_prod_idx, prod_bf.data(), single_bond_fdim, bond_property_list);
+  fill_single_bond_feats(rxn.reac, b_reac_idx, reac_bf, bond_property_list);
+  fill_single_bond_feats(rxn.prod, b_prod_idx, prod_bf, bond_property_list);
   // Note: BALANCE adjustment is applied by the caller (enumerate_cgr_bonds) before calling this function.
   // The b_reac_idx / b_prod_idx passed in are already the post-balance-adjusted indices.
   // No BALANCE copying is done here.
