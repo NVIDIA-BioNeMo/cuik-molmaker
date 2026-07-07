@@ -43,26 +43,31 @@ static void populate_graph_arrays(GraphData& gd) {
   gd.atoms = std::unique_ptr<CompactAtom[]>(new CompactAtom[num_atoms]);
   for (size_t i = 0; i < num_atoms; ++i) {
     const RDKit::Atom* a = mol.getAtomWithIdx(i);
-    gd.atoms[i]          = CompactAtom{uint8_t(a->getAtomicNum()),
-                              uint8_t(a->getTotalDegree()),
-                              int8_t(a->getFormalCharge()),
-                              uint8_t(a->getChiralTag()),
-                              uint8_t(a->getTotalNumHs()),
-                              uint8_t(a->getHybridization()),
-                              a->getIsAromatic(),
-                              float(a->getMass())};
+    gd.atoms[i]          = CompactAtom{.atomicNum     = uint8_t(a->getAtomicNum()),
+                                       .totalDegree   = uint8_t(a->getTotalDegree()),
+                                       .formalCharge  = int8_t(a->getFormalCharge()),
+                                       .chiralTag     = uint8_t(a->getChiralTag()),
+                                       .totalNumHs    = uint8_t(a->getTotalNumHs()),
+                                       .hybridization = uint8_t(a->getHybridization()),
+                                       .isAromatic    = a->getIsAromatic(),
+                                       .mass          = float(a->getMass())};
   }
 
   gd.bonds                              = std::unique_ptr<CompactBond[]>(new CompactBond[num_bonds]);
   const RDKit::RingInfo* const ringInfo = mol.getRingInfo();
+  // numBondRings() below requires ring perception to have run. SmilesToMol sanitizes
+  // by default (which computes the SSSR), so this holds on every current path; assert
+  // it explicitly rather than relying on that implicitly.
+  if (!ringInfo->isInitialized())
+    throw std::runtime_error("populate_graph_arrays: ring info is not initialized (molecule was not sanitized).");
   for (size_t i = 0; i < num_bonds; ++i) {
     const RDKit::Bond* b = mol.getBondWithIdx(i);
-    gd.bonds[i]          = CompactBond{uint8_t(b->getBondType()),
-                              b->getIsConjugated(),
-                              ringInfo->numBondRings(i) != 0,
-                              uint8_t(b->getStereo()),
-                              b->getBeginAtomIdx(),
-                              b->getEndAtomIdx()};
+    gd.bonds[i]          = CompactBond{.bondType     = uint8_t(b->getBondType()),
+                                       .isConjugated = b->getIsConjugated(),
+                                       .isInRing     = ringInfo->numBondRings(i) != 0,
+                                       .stereo       = uint8_t(b->getStereo()),
+                                       .beginAtomIdx = b->getBeginAtomIdx(),
+                                       .endAtomIdx   = b->getEndAtomIdx()};
   }
 }
 
@@ -147,16 +152,16 @@ CompactReaction parse_reaction(const std::string& reac_smi, const std::string& p
   }
 
   // Build GraphData for each side (mol is moved in; arrays populated from it)
-  GraphData reac_gd{n_reac_atoms,
-                    std::unique_ptr<CompactAtom[]>(),
-                    reac_mol->getNumBonds(),
-                    std::unique_ptr<CompactBond[]>(),
-                    std::move(reac_mol)};
-  GraphData prod_gd{n_prod_atoms,
-                    std::unique_ptr<CompactAtom[]>(),
-                    prod_mol->getNumBonds(),
-                    std::unique_ptr<CompactBond[]>(),
-                    std::move(prod_mol)};
+  GraphData reac_gd{.num_atoms = n_reac_atoms,
+                    .atoms     = std::unique_ptr<CompactAtom[]>(),
+                    .num_bonds = reac_mol->getNumBonds(),
+                    .bonds     = std::unique_ptr<CompactBond[]>(),
+                    .mol       = std::move(reac_mol)};
+  GraphData prod_gd{.num_atoms = n_prod_atoms,
+                    .atoms     = std::unique_ptr<CompactAtom[]>(),
+                    .num_bonds = prod_mol->getNumBonds(),
+                    .bonds     = std::unique_ptr<CompactBond[]>(),
+                    .mol       = std::move(prod_mol)};
 
   populate_graph_arrays(reac_gd);
   populate_graph_arrays(prod_gd);
