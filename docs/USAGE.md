@@ -77,6 +77,48 @@ print(batch_features[3].shape) # (2*total_num_bonds,)
 print(batch_features[4].shape) # (total_num_atoms,)
 ```
 
+### For a batch of reactions (Condensed Graph of Reaction)
+```python
+# Reactant and product SMILES must be atom-mapped: corresponding atoms carry the
+# same `:N` map number on both sides (see the Daylight SMILES/SMIRKS spec).
+# Providing a correct, unique mapping is the caller's responsibility; duplicate
+# map numbers on a side are not validated and give an arbitrary correspondence.
+reac_smiles_list = ["[CH3:1][Br:2].[OH-:3]", "[CH3:1][CH2:2][Cl:3].[F-:4]"]
+prod_smiles_list = ["[CH3:1][OH:3].[Br-:2]", "[CH3:1][CH2:2][F:4].[Cl-:3]"]
+
+# Reaction mode controls how reactant/product features are combined into the CGR.
+# Available modes: REAC_DIFF (default), REAC_PROD, PROD_DIFF and their _BALANCE variants.
+mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
+
+# keep_h keeps hydrogens that are explicitly written in the input SMILES; it does
+# not add any, it only keeps the ones already specified (e.g. a mapped `[H:3]`).
+# add_h adds new hydrogens via RDKit AddHs; these are unmapped, so for a CGR they
+# become reactant- or product-only phantom atoms and are usually not what you want.
+keep_h = True
+add_h = False
+
+rxn_features = cuik_molmaker.batch_reaction_featurizer(
+    reac_smiles_list, prod_smiles_list,
+    atom_onehot_feature_array, atom_float_feature_array, bond_feature_array,
+    keep_h, add_h, offset_carbon, mode)
+
+# CGR atom features from all reactions, concatenated along dimension 0.
+# The feature dimension is doubled relative to a single molecule (reactant + product).
+print(rxn_features[0].shape) # (total_num_atoms, cgr_atom_feature_dim)
+
+# CGR bond features from all reactions, concatenated along dimension 0
+print(rxn_features[1].shape) # (total_num_directed_edges, cgr_bond_feature_dim)
+
+# Edge indices in COO format (row 0 = source atom, row 1 = destination atom)
+print(rxn_features[2].shape) # (2, total_num_directed_edges)
+
+# Reverse edge index: for each directed edge, the index of its opposite-direction edge
+print(rxn_features[3].shape) # (total_num_directed_edges,)
+
+# Associate node index: indicates the reaction idx each node belongs to
+print(rxn_features[4].shape) # (total_num_atoms,)
+```
+
 
 ## Generate molecule features
 #### Generate RDKit 2D descriptors for a list of molecules 

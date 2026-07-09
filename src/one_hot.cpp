@@ -177,6 +177,27 @@ size_t get_one_hot_atom_feature_size(AtomOneHotFeature feature) {
   }
 }
 
+// Returns the 0-based index within the atomic-number one-hot block for a given atomicNum.
+// Mirrors the logic in each ATOMIC_NUM* case of get_one_hot_atom_feature.
+// For unrecognized atomic numbers, returns the "other" slot (last valid index).
+size_t get_atomic_num_onehot_index(uint8_t atomicNum, AtomOneHotFeature feature) {
+  switch (feature) {
+    case AtomOneHotFeature::ATOMIC_NUM: {
+      // 1-indexed, atomicNum in [1,100] → index [0,99]; unknown → 100
+      size_t idx = size_t(atomicNum);
+      --idx;
+      return (idx >= atomicNumCount) ? atomicNumCount : idx;
+    }
+    case AtomOneHotFeature::ATOMIC_NUM_COMMON:
+      return atomicNumCommonLookup[size_t(atomicNum)];  // returns atomicNumCommonCount for unknowns
+    case AtomOneHotFeature::ATOMIC_NUM_ORGANIC:
+      return atomicNumOrganicLookup[size_t(atomicNum)];  // returns atomicNumOrganicCount for unknowns
+    default:
+      assert(0 && "get_atomic_num_onehot_index called with non-atomic-num feature");
+      return 0;
+  }
+}
+
 // Fills in a particular atom `feature`'s one-hot encoding into `data`, for all atoms.
 // See the declaration in one_hot.h for more details.
 template <typename T>

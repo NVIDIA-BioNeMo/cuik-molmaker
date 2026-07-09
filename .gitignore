@@ -67,4 +67,6 @@ Thumbs.db
 
 # Project specific
 build/
-*.log 
+*.log
+cuik_molmaker/
+scratch/

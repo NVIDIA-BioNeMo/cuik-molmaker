@@ -15,6 +15,12 @@
 //! `data` argument.  Implementation is in one_hot.cpp
 size_t get_one_hot_atom_feature_size(AtomOneHotFeature feature);
 
+//! Returns the 0-based index within the one-hot block for the given atomic number.
+//! Used by the CGR num_only representation: all-zero except the atomic-number index.
+//! Matches the "other/unknown" fallback slot for unrecognized atomic numbers,
+//! exactly mirroring chemprop's MultiHotAtomFeaturizer.num_only(). Implementation in one_hot.cpp
+size_t get_atomic_num_onehot_index(uint8_t atomicNum, AtomOneHotFeature feature);
+
 //! Fills in a particular atom `feature`'s one-hot encoding into `data`, for all atoms.
 //! Template type `T` can be `int16_t` (FP16), `float`, or `double`.
 //! Implementation is in one_hot.cpp

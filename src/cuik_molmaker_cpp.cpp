@@ -64,4 +64,35 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.def("list_all_atom_float_features", &list_all_atom_float_features, "Returns a list of all atom float features.");
 
   m.def("list_all_bond_features", &list_all_bond_features, "Returns a list of all bond features.");
+
+  // Reaction featurization (CGR)
+  m.def("reaction_mode_to_int",
+        &reaction_mode_to_int,
+        "Convert a reaction mode name (e.g. 'REAC_DIFF') to its integer enum value; raises on an unknown name.");
+  m.def(
+    "batch_reaction_featurizer",
+    [](const std::vector<std::string>& reac_smiles_list,
+       const std::vector<std::string>& prod_smiles_list,
+       const py::array_t<int64_t>&     atom_property_list_onehot,
+       const py::array_t<int64_t>&     atom_property_list_float,
+       const py::array_t<int64_t>&     bond_property_list,
+       bool                            keep_h,
+       bool                            add_h,
+       bool                            offset_carbon,
+       int64_t                         mode_int) {
+      return batch_reaction_featurizer(reac_smiles_list,
+                                       prod_smiles_list,
+                                       atom_property_list_onehot,
+                                       atom_property_list_float,
+                                       bond_property_list,
+                                       keep_h,
+                                       add_h,
+                                       offset_carbon,
+                                       ReactionMode(mode_int));
+    },
+    "Accepts lists of reactant and product SMILES strings and returns a list of NumPy arrays "
+    "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions. "
+    "SMILES must be atom-mapped and providing a correct, unique mapping is the caller's "
+    "responsibility (uniqueness is not validated). keep_h keeps explicit hydrogens already in the "
+    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR.");
 }

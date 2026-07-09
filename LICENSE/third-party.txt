@@ -191,3 +191,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 *******************
+
+
+Name: RDB7 (reaction dataset)
+Version: Zenodo record 6618262 (wb97xd3.csv; Sci. Data 2022, 9, 417)
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+URL: https://doi.org/10.5281/zenodo.6618262
+License Text:
+The 100 atom-mapped reactions in tests/data/sample_rxns_100.csv are randomly
+sampled (see tests/data/README.md) from the RDB7 dataset and are used solely as
+regression-test fixtures for the reaction featurizer. Only the atom-mapped
+reaction SMILES are used (activation energies and other columns are not
+included).
+
+RDB7 is distributed under the Creative Commons Attribution 4.0 International
+(CC BY 4.0) license. Full license text:
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+Required attribution:
+  Spiekermann, K.; Pattanaik, L.; Green, W. H. "High Accuracy Barrier
+  Heights, Enthalpies, and Rate Coefficients for Chemical Reactions."
+  Scientific Data 2022, 9, 417. https://doi.org/10.1038/s41597-022-01529-6
+  Zenodo: https://doi.org/10.5281/zenodo.6618262
+
+
+*******************
