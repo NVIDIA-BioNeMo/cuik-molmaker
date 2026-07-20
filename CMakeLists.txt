@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 cmake_minimum_required(VERSION 3.15)
-project(cuik_molmaker_cpp VERSION 0.2 LANGUAGES CXX)
+project(cuik_molmaker_cpp VERSION 0.3.0 LANGUAGES CXX)
 
 # Set C++20 standard
 set(CMAKE_CXX_STANDARD 20)

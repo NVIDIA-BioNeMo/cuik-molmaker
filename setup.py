@@ -14,7 +14,7 @@ from setuptools import find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 # Version for the cuik_molmaker package (cuik_molmaker_pin uses RDKIT_VERSION instead).
-CUIK_MOLMAKER_VERSION = "0.2.1"
+CUIK_MOLMAKER_VERSION = "0.3.0rc1"
 
 # Set global vars
 RDKIT_VERSION = os.environ.get("RDKIT_VERSION")
@@ -322,14 +322,18 @@ setup(
             "flake8>=7.3.0",
             "isort>=5.13.2",
             "pre-commit>=3.6.0",
+            "bump2version>=1.0.1",
         ],
     },
-    python_requires=f"=={PYTHON_VERSION}.*",
+    python_requires=">=3.11,<3.15",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: Apache Software License",
-        f"Programming Language :: Python :: {PYTHON_VERSION}",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Topic :: Scientific/Engineering :: Chemistry",
     ],
     entry_points={
