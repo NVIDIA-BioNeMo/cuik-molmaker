@@ -49,14 +49,42 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.def("bond_feature_names_to_array",
         &bond_feature_names_to_array,
         "Accepts feature names and returns a NumPy array representing them as integers");
-  m.def(
-    "mol_featurizer",
-    &mol_featurizer,
-    "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the molecule.");
-  m.def(
-    "batch_mol_featurizer",
-    &batch_mol_featurizer,
-    "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of the molecules.");
+  m.def("mol_featurizer",
+        &mol_featurizer,
+        "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the "
+        "molecule. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based ordering "
+        "of the atoms are used to reorder them; maps that do not form such an ordering are ignored. keep_h retains "
+        "explicit hydrogens already written in the SMILES (it does not add any). ignore_stereo clears R/S and "
+        "cis/trans stereochemistry after parsing.",
+        py::arg("smiles_string"),
+        py::arg("atom_property_list_onehot"),
+        py::arg("atom_property_list_float"),
+        py::arg("bond_property_list"),
+        py::arg("explicit_H"),
+        py::arg("offset_carbon"),
+        py::arg("duplicate_edges"),
+        py::arg("add_self_loop"),
+        py::arg("ordered")       = true,
+        py::arg("keep_h")        = false,
+        py::arg("ignore_stereo") = false);
+  m.def("batch_mol_featurizer",
+        &batch_mol_featurizer,
+        "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of "
+        "the molecules. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based "
+        "ordering of the atoms are used to reorder them; maps that do not form such an ordering are ignored. keep_h "
+        "retains explicit hydrogens already written in each SMILES (it does not add any). ignore_stereo clears R/S "
+        "and cis/trans stereochemistry after parsing.",
+        py::arg("smiles_list"),
+        py::arg("atom_property_list_onehot"),
+        py::arg("atom_property_list_float"),
+        py::arg("bond_property_list"),
+        py::arg("explicit_H"),
+        py::arg("offset_carbon"),
+        py::arg("duplicate_edges"),
+        py::arg("add_self_loop"),
+        py::arg("ordered")       = true,
+        py::arg("keep_h")        = false,
+        py::arg("ignore_stereo") = false);
   m.def("list_all_atom_onehot_features",
         &list_all_atom_onehot_features,
         "Returns a list of all atom one-hot features.");
@@ -79,7 +107,8 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
        bool                            keep_h,
        bool                            add_h,
        bool                            offset_carbon,
-       int64_t                         mode_int) {
+       int64_t                         mode_int,
+       bool                            ignore_stereo) {
       return batch_reaction_featurizer(reac_smiles_list,
                                        prod_smiles_list,
                                        atom_property_list_onehot,
@@ -88,11 +117,24 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
                                        keep_h,
                                        add_h,
                                        offset_carbon,
-                                       ReactionMode(mode_int));
+                                       ReactionMode(mode_int),
+                                       ignore_stereo);
     },
     "Accepts lists of reactant and product SMILES strings and returns a list of NumPy arrays "
     "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions. "
     "SMILES must be atom-mapped and providing a correct, unique mapping is the caller's "
     "responsibility (uniqueness is not validated). keep_h keeps explicit hydrogens already in the "
-    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR.");
+    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR. ignore_stereo "
+    "clears R/S and cis/trans stereochemistry from both the reactant and product before "
+    "featurizing.",
+    py::arg("reac_smiles_list"),
+    py::arg("prod_smiles_list"),
+    py::arg("atom_property_list_onehot"),
+    py::arg("atom_property_list_float"),
+    py::arg("bond_property_list"),
+    py::arg("keep_h"),
+    py::arg("add_h"),
+    py::arg("offset_carbon"),
+    py::arg("mode_int"),
+    py::arg("ignore_stereo") = false);
 }

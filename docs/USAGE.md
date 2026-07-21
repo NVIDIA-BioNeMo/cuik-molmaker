@@ -38,6 +38,36 @@ duplicate_edges = True
 add_self_loop = False
 ```
 
+#### Controlling atom order (optional)
+Both `mol_featurizer` and `batch_mol_featurizer` accept an optional `ordered` argument, which
+defaults to `True`. When it is true and the SMILES string carries atom map numbers that form a
+complete ordering of the atoms — numbered either `0..n-1` or `1..n` — the atoms are reordered
+accordingly, so that features are emitted in the order you asked for:
+
+```python
+# Atoms come out in the order O, C rather than the order written in the SMILES.
+cuik_molmaker.mol_featurizer("[CH3:2][OH:1]", ..., ordered=True)
+```
+
+Atom maps that do not form such an ordering (partial mapping, duplicates, gaps, or a range not
+starting at 0 or 1) are ignored, leaving the atoms in the order the SMILES parser produced them.
+Pass `ordered=False` to ignore atom map numbers entirely. Either way the map numbers are stripped
+before featurization and never appear in the features.
+
+#### Keeping explicit hydrogens and ignoring stereochemistry (optional)
+`mol_featurizer` and `batch_mol_featurizer` also accept `keep_h` and `ignore_stereo`,
+both defaulting to `False`:
+
+```python
+# keep_h retains explicit hydrogens already written in the SMILES; it does not add
+# any that aren't there (use explicit_H for that).
+cuik_molmaker.mol_featurizer("[H]C([H])([H])O", ..., keep_h=True)  # 5 atoms, not 2
+
+# ignore_stereo clears R/S and cis/trans stereochemistry from the molecule
+# (RDKit::MolOps::removeStereochemistry) before featurizing.
+cuik_molmaker.mol_featurizer("N[C@@H](C)C(=O)O", ..., ignore_stereo=True)
+```
+
 #### Generate atom and bond features
 ```python
 all_features =cuik_molmaker.mol_featurizer(smiles, atom_onehot_feature_array, atom_float_feature_array, bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
@@ -97,10 +127,14 @@ mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
 keep_h = True
 add_h = False
 
+# ignore_stereo clears R/S and cis/trans stereochemistry from both the reactant and
+# product before featurizing (RDKit::MolOps::removeStereochemistry). Defaults to False.
+ignore_stereo = False
+
 rxn_features = cuik_molmaker.batch_reaction_featurizer(
     reac_smiles_list, prod_smiles_list,
     atom_onehot_feature_array, atom_float_feature_array, bond_feature_array,
-    keep_h, add_h, offset_carbon, mode)
+    keep_h, add_h, offset_carbon, mode, ignore_stereo=ignore_stereo)
 
 # CGR atom features from all reactions, concatenated along dimension 0.
 # The feature dimension is doubled relative to a single molecule (reactant + product).
