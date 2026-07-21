@@ -38,6 +38,22 @@ duplicate_edges = True
 add_self_loop = False
 ```
 
+#### Controlling atom order (optional)
+Both `mol_featurizer` and `batch_mol_featurizer` accept an optional `ordered` argument, which
+defaults to `True`. When it is true and the SMILES string carries atom map numbers that form a
+complete ordering of the atoms — numbered either `0..n-1` or `1..n` — the atoms are reordered
+accordingly, so that features are emitted in the order you asked for:
+
+```python
+# Atoms come out in the order O, C rather than the order written in the SMILES.
+cuik_molmaker.mol_featurizer("[CH3:2][OH:1]", ..., ordered=True)
+```
+
+Atom maps that do not form such an ordering (partial mapping, duplicates, gaps, or a range not
+starting at 0 or 1) are ignored, leaving the atoms in the order the SMILES parser produced them.
+Pass `ordered=False` to ignore atom map numbers entirely. Either way the map numbers are stripped
+before featurization and never appear in the features.
+
 #### Generate atom and bond features
 ```python
 all_features =cuik_molmaker.mol_featurizer(smiles, atom_onehot_feature_array, atom_float_feature_array, bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)

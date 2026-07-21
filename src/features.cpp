@@ -25,8 +25,8 @@
 
 // This is called by `mol_featurizer` and `batch_mol_featurizer` to parse the SMILES string into an RWMol and
 // cache some data about the atoms and bonds.
-static GraphData read_graph(const std::string& smiles_string, bool explicit_H) {
-  std::unique_ptr<RDKit::RWMol> mol{parse_mol(smiles_string, explicit_H)};
+static GraphData read_graph(const std::string& smiles_string, bool explicit_H, bool ordered) {
+  std::unique_ptr<RDKit::RWMol> mol{parse_mol(smiles_string, explicit_H, ordered)};
 
   if (!mol) {
     return GraphData{0, std::unique_ptr<CompactAtom[]>(), 0, std::unique_ptr<CompactBond[]>(), std::move(mol)};
@@ -519,7 +519,8 @@ std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
                                       bool                        explicit_H,
                                       bool                        offset_carbon,
                                       bool                        duplicate_edges,
-                                      bool                        add_self_loop) {
+                                      bool                        add_self_loop,
+                                      bool                        ordered) {
   return batch_mol_featurizer(std::vector{smiles_string},
                               atom_property_list_onehot,
                               atom_property_list_float,
@@ -527,7 +528,8 @@ std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
                               explicit_H,
                               offset_carbon,
                               duplicate_edges,
-                              add_self_loop);
+                              add_self_loop,
+                              ordered);
 }
 
 std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
@@ -537,7 +539,8 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
                                             bool                            explicit_H,
                                             bool                            offset_carbon,
                                             bool                            duplicate_edges,
-                                            bool                            add_self_loop) {
+                                            bool                            add_self_loop,
+                                            bool                            ordered) {
   const size_t n_smiles = smiles_list.size();
 
   // Create graphs
@@ -547,7 +550,7 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
   size_t total_num_atoms = 0, total_num_bonds = 0;
 
   for (const auto& smiles : smiles_list) {
-    GraphData igraph = read_graph(smiles, explicit_H);
+    GraphData igraph = read_graph(smiles, explicit_H, ordered);
     total_num_atoms += igraph.num_atoms;
     total_num_bonds += igraph.num_bonds;
     graph_list.push_back(std::move(igraph));

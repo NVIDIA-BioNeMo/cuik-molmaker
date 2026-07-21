@@ -14,8 +14,7 @@ import pytest
 import cuik_molmaker
 
 
-def atom_features(smiles):
-    """Atom feature rows for `smiles`, one row per atom, in featurizer order."""
+def feature_arrays():
     atom_onehot_property_list = cuik_molmaker.atom_onehot_feature_names_to_array(
         ["atomic-number-common"]
     )
@@ -23,6 +22,15 @@ def atom_features(smiles):
         ["atomic-number"]
     )
     bond_property_list = cuik_molmaker.bond_feature_names_to_array(["bond-type-float"])
+    return atom_onehot_property_list, atom_float_property_list, bond_property_list
+
+
+def atom_features(smiles, **kwargs):
+    """Atom feature rows for `smiles`, one row per atom, in featurizer order.
+
+    Extra keyword arguments are forwarded to `mol_featurizer`, so passing
+    nothing exercises the default value of `ordered`.
+    """
     explicit_H, offset_carbon, duplicate_edges, add_self_loop = (
         False,
         False,
@@ -31,13 +39,32 @@ def atom_features(smiles):
     )
     atom_feats = cuik_molmaker.mol_featurizer(
         smiles,
-        atom_onehot_property_list,
-        atom_float_property_list,
-        bond_property_list,
+        *feature_arrays(),
         explicit_H,
         offset_carbon,
         duplicate_edges,
         add_self_loop,
+        **kwargs,
+    )[0]
+    return atom_feats
+
+
+def batch_atom_features(smiles_list, **kwargs):
+    """Same as `atom_features`, but through `batch_mol_featurizer`."""
+    explicit_H, offset_carbon, duplicate_edges, add_self_loop = (
+        False,
+        False,
+        False,
+        False,
+    )
+    atom_feats = cuik_molmaker.batch_mol_featurizer(
+        smiles_list,
+        *feature_arrays(),
+        explicit_H,
+        offset_carbon,
+        duplicate_edges,
+        add_self_loop,
+        **kwargs,
     )[0]
     return atom_feats
 
@@ -102,3 +129,38 @@ def test_map_numbers_do_not_leak_into_features():
     """The map numbers are stripped, so a mapped molecule and the equivalent
     unmapped one featurize identically."""
     np.testing.assert_allclose(atom_features("[CH3:1][OH:2]"), atom_features("CO"))
+
+
+@pytest.mark.parametrize("smiles", ["[OH:1][CH3:0]", "[OH:2][CH3:1]"])
+def test_ordered_false_disables_reordering(smiles):
+    """With ordered=False the atom maps are ignored entirely, leaving the atoms
+    in the order the SMILES string lists them (O, then C)."""
+    np.testing.assert_allclose(
+        atom_features(smiles, ordered=False), atom_features("OC")
+    )
+
+
+@pytest.mark.parametrize("smiles", ["[OH:1][CH3:0]", "[OH:2][CH3:1]"])
+def test_ordered_defaults_to_true(smiles):
+    np.testing.assert_allclose(
+        atom_features(smiles), atom_features(smiles, ordered=True)
+    )
+
+
+def test_ordered_accepted_positionally():
+    """`ordered` is the ninth positional argument, after add_self_loop."""
+    np.testing.assert_allclose(
+        cuik_molmaker.mol_featurizer(
+            "[OH:2][CH3:1]", *feature_arrays(), False, False, False, False, False
+        )[0],
+        atom_features("OC"),
+    )
+
+
+@pytest.mark.parametrize("ordered", [True, False])
+def test_batch_featurizer_honors_ordered(ordered):
+    expected = "CO" if ordered else "OC"
+    np.testing.assert_allclose(
+        batch_atom_features(["[OH:2][CH3:1]"], ordered=ordered),
+        atom_features(expected),
+    )

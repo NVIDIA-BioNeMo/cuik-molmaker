@@ -49,14 +49,34 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
   m.def("bond_feature_names_to_array",
         &bond_feature_names_to_array,
         "Accepts feature names and returns a NumPy array representing them as integers");
-  m.def(
-    "mol_featurizer",
-    &mol_featurizer,
-    "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the molecule.");
-  m.def(
-    "batch_mol_featurizer",
-    &batch_mol_featurizer,
-    "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of the molecules.");
+  m.def("mol_featurizer",
+        &mol_featurizer,
+        "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the "
+        "molecule. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based ordering "
+        "of the atoms are used to reorder them; maps that do not form such an ordering are ignored.",
+        py::arg("smiles_string"),
+        py::arg("atom_property_list_onehot"),
+        py::arg("atom_property_list_float"),
+        py::arg("bond_property_list"),
+        py::arg("explicit_H"),
+        py::arg("offset_carbon"),
+        py::arg("duplicate_edges"),
+        py::arg("add_self_loop"),
+        py::arg("ordered") = true);
+  m.def("batch_mol_featurizer",
+        &batch_mol_featurizer,
+        "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of "
+        "the molecules. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based "
+        "ordering of the atoms are used to reorder them; maps that do not form such an ordering are ignored.",
+        py::arg("smiles_list"),
+        py::arg("atom_property_list_onehot"),
+        py::arg("atom_property_list_float"),
+        py::arg("bond_property_list"),
+        py::arg("explicit_H"),
+        py::arg("offset_carbon"),
+        py::arg("duplicate_edges"),
+        py::arg("add_self_loop"),
+        py::arg("ordered") = true);
   m.def("list_all_atom_onehot_features",
         &list_all_atom_onehot_features,
         "Returns a list of all atom one-hot features.");

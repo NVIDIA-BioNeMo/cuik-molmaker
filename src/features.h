@@ -408,6 +408,8 @@ CUIK_EXPORT std::vector<std::string> list_all_bond_features();
 //!                      self-edges.
 //! @param offset_carbon If true, some atom float features will subtract a
 //!                      value representing carbon, so that carbon atoms would have value zero.
+//! @param ordered If true, atom map numbers in the SMILES string that form a complete ordering
+//!                of the atoms will be used to reorder them.  See `parse_mol` for details.
 //! @return A vector of torch NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, `num_atoms` by the number of values required for all one-hot and float atom
 //!         features.  The second array is the bond features array, `num_edges` (or
@@ -423,7 +425,8 @@ CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          sm
                                                   bool                        explicit_H,
                                                   bool                        offset_carbon,
                                                   bool                        duplicate_edges,
-                                                  bool                        add_self_loop);
+                                                  bool                        add_self_loop,
+                                                  bool                        ordered = true);
 
 //! Creates an RWMol from a SMILES string.
 //!
@@ -455,6 +458,8 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
 //!                      value representing carbon, so that carbon atoms would have value zero.
 //! @param add_self_loop If true, bond features will have values stored for
 //!                      self-edges.
+//! @param ordered If true, atom map numbers in each SMILES string that form a complete ordering
+//!                of the atoms will be used to reorder them.  See `parse_mol` for details.
 //! @return A vector of NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, total number of atoms  by the number of values required for all one-hot and
 //!         float atom features.  The second array is the bond features array, total number of
@@ -471,7 +476,8 @@ CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::s
                                                         bool                            explicit_H,
                                                         bool                            offset_carbon,
                                                         bool                            duplicate_edges,
-                                                        bool                            add_self_loop);
+                                                        bool                            add_self_loop,
+                                                        bool                            ordered = true);
 
 //! Parses one side of a reaction SMILES into an RWMol, preserving atom-map numbers.
 //! Unlike parse_mol, this function does NOT clear atom-map numbers and does NOT reorder atoms.
