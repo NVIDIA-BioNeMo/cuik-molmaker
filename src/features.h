@@ -410,6 +410,11 @@ CUIK_EXPORT std::vector<std::string> list_all_bond_features();
 //!                      value representing carbon, so that carbon atoms would have value zero.
 //! @param ordered If true, atom map numbers in the SMILES string that form a complete ordering
 //!                of the atoms will be used to reorder them.  See `parse_mol` for details.
+//! @param keep_h If true, explicit hydrogen atoms already written in the SMILES string are
+//!               kept (SmilesParserParams::removeHs = false).  This does not add any hydrogens;
+//!               see `explicit_H` for that.
+//! @param ignore_stereo If true, R/S and cis/trans stereochemistry is cleared from the
+//!                      molecule (RDKit::MolOps::removeStereochemistry) after parsing.
 //! @return A vector of torch NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, `num_atoms` by the number of values required for all one-hot and float atom
 //!         features.  The second array is the bond features array, `num_edges` (or
@@ -426,7 +431,9 @@ CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          sm
                                                   bool                        offset_carbon,
                                                   bool                        duplicate_edges,
                                                   bool                        add_self_loop,
-                                                  bool                        ordered = true);
+                                                  bool                        ordered       = true,
+                                                  bool                        keep_h        = false,
+                                                  bool                        ignore_stereo = false);
 
 //! Creates an RWMol from a SMILES string.
 //!
@@ -435,9 +442,17 @@ CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          sm
 //! reordered according to this explicit order, and the bookmarks will be removed, so that
 //! canonical orders can be correctly compared later.
 //!
+//! If `keep_h` is true, explicit hydrogen atoms already written in the SMILES string are kept
+//! (this does not add any hydrogens). If `ignore_stereo` is true, R/S and cis/trans
+//! stereochemistry is cleared from the molecule after parsing.
+//!
 //! This is implemented in cuik_molmaker_cpp.cpp, but is declared in this header so
 //! that both labels.cpp and features.cpp can call it.
-std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool explicit_H, bool ordered = true);
+std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string,
+                                        bool                explicit_H,
+                                        bool                ordered       = true,
+                                        bool                keep_h        = false,
+                                        bool                ignore_stereo = false);
 
 //! `batch_mol_featurizer` is called from Python to get feature arrays for `smiles_list`.
 //!
@@ -460,6 +475,10 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
 //!                      self-edges.
 //! @param ordered If true, atom map numbers in each SMILES string that form a complete ordering
 //!                of the atoms will be used to reorder them.  See `parse_mol` for details.
+//! @param keep_h If true, explicit hydrogen atoms already written in each SMILES string are
+//!               kept.  See `parse_mol` for details.
+//! @param ignore_stereo If true, R/S and cis/trans stereochemistry is cleared from each
+//!                      molecule after parsing.  See `parse_mol` for details.
 //! @return A vector of NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, total number of atoms  by the number of values required for all one-hot and
 //!         float atom features.  The second array is the bond features array, total number of
@@ -477,7 +496,9 @@ CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::s
                                                         bool                            offset_carbon,
                                                         bool                            duplicate_edges,
                                                         bool                            add_self_loop,
-                                                        bool                            ordered = true);
+                                                        bool                            ordered       = true,
+                                                        bool                            keep_h        = false,
+                                                        bool                            ignore_stereo = false);
 
 //! Parses one side of a reaction SMILES into an RWMol, preserving atom-map numbers.
 //! Unlike parse_mol, this function does NOT clear atom-map numbers and does NOT reorder atoms.

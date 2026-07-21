@@ -53,7 +53,9 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
         &mol_featurizer,
         "Accepts a SMILES string and returns a list of NumPy arrays representing atom and bond features of the "
         "molecule. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based ordering "
-        "of the atoms are used to reorder them; maps that do not form such an ordering are ignored.",
+        "of the atoms are used to reorder them; maps that do not form such an ordering are ignored. keep_h retains "
+        "explicit hydrogens already written in the SMILES (it does not add any). ignore_stereo clears R/S and "
+        "cis/trans stereochemistry after parsing.",
         py::arg("smiles_string"),
         py::arg("atom_property_list_onehot"),
         py::arg("atom_property_list_float"),
@@ -62,12 +64,16 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
         py::arg("offset_carbon"),
         py::arg("duplicate_edges"),
         py::arg("add_self_loop"),
-        py::arg("ordered") = true);
+        py::arg("ordered")       = true,
+        py::arg("keep_h")        = false,
+        py::arg("ignore_stereo") = false);
   m.def("batch_mol_featurizer",
         &batch_mol_featurizer,
         "Accepts a list of SMILES strings and returns a list of NumPy arrays representing atom and bond features of "
         "the molecules. If ordered is true (the default), atom map numbers forming a complete 0-based or 1-based "
-        "ordering of the atoms are used to reorder them; maps that do not form such an ordering are ignored.",
+        "ordering of the atoms are used to reorder them; maps that do not form such an ordering are ignored. keep_h "
+        "retains explicit hydrogens already written in each SMILES (it does not add any). ignore_stereo clears R/S "
+        "and cis/trans stereochemistry after parsing.",
         py::arg("smiles_list"),
         py::arg("atom_property_list_onehot"),
         py::arg("atom_property_list_float"),
@@ -76,7 +82,9 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
         py::arg("offset_carbon"),
         py::arg("duplicate_edges"),
         py::arg("add_self_loop"),
-        py::arg("ordered") = true);
+        py::arg("ordered")       = true,
+        py::arg("keep_h")        = false,
+        py::arg("ignore_stereo") = false);
   m.def("list_all_atom_onehot_features",
         &list_all_atom_onehot_features,
         "Returns a list of all atom one-hot features.");

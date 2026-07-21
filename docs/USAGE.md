@@ -54,6 +54,20 @@ starting at 0 or 1) are ignored, leaving the atoms in the order the SMILES parse
 Pass `ordered=False` to ignore atom map numbers entirely. Either way the map numbers are stripped
 before featurization and never appear in the features.
 
+#### Keeping explicit hydrogens and ignoring stereochemistry (optional)
+`mol_featurizer` and `batch_mol_featurizer` also accept `keep_h` and `ignore_stereo`,
+both defaulting to `False`:
+
+```python
+# keep_h retains explicit hydrogens already written in the SMILES; it does not add
+# any that aren't there (use explicit_H for that).
+cuik_molmaker.mol_featurizer("[H]C([H])([H])O", ..., keep_h=True)  # 5 atoms, not 2
+
+# ignore_stereo clears R/S and cis/trans stereochemistry from the molecule
+# (RDKit::MolOps::removeStereochemistry) before featurizing.
+cuik_molmaker.mol_featurizer("N[C@@H](C)C(=O)O", ..., ignore_stereo=True)
+```
+
 #### Generate atom and bond features
 ```python
 all_features =cuik_molmaker.mol_featurizer(smiles, atom_onehot_feature_array, atom_float_feature_array, bond_feature_array, explicit_h, offset_carbon, duplicate_edges, add_self_loop)
