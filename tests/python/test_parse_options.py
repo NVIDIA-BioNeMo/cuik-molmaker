@@ -134,3 +134,32 @@ def test_ignore_stereo_clears_bond_stereo():
     assert not np.allclose(cis, trans)
     np.testing.assert_allclose(cis_cleared, trans_cleared)
     np.testing.assert_allclose(cis_cleared, plain)
+
+
+# ---------------------------------------------------------------------------
+# ignore_stereo on the reaction (CGR) path
+# ---------------------------------------------------------------------------
+
+
+def test_batch_reaction_featurizer_ignore_stereo_clears_chirality():
+    """Identity reaction (product == reactant) on an atom-mapped molecule
+    with one stereocenter (atom map 2). ignore_stereo must change the CGR
+    atom features, since it strips the stereocenter on both reactant and
+    product sides."""
+    reac = ["[NH2:1][C@@H:2]([CH3:3])[C:4](=[O:5])[OH:6]"]
+    prod = ["[NH2:1][C@@H:2]([CH3:3])[C:4](=[O:5])[OH:6]"]
+    oh = cuik_molmaker.atom_onehot_feature_names_to_array(
+        ["atomic-number-common", "chirality"]
+    )
+    fl = cuik_molmaker.atom_float_feature_names_to_array([])
+    bp = cuik_molmaker.bond_feature_names_to_array(["is-null"])
+    mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
+
+    with_stereo = cuik_molmaker.batch_reaction_featurizer(
+        reac, prod, oh, fl, bp, False, False, False, mode, ignore_stereo=False
+    )
+    without_stereo = cuik_molmaker.batch_reaction_featurizer(
+        reac, prod, oh, fl, bp, False, False, False, mode, ignore_stereo=True
+    )
+
+    assert not np.allclose(with_stereo[0], without_stereo[0])

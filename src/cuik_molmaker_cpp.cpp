@@ -107,7 +107,8 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
        bool                            keep_h,
        bool                            add_h,
        bool                            offset_carbon,
-       int64_t                         mode_int) {
+       int64_t                         mode_int,
+       bool                            ignore_stereo) {
       return batch_reaction_featurizer(reac_smiles_list,
                                        prod_smiles_list,
                                        atom_property_list_onehot,
@@ -116,11 +117,24 @@ PYBIND11_MODULE(cuik_molmaker_cpp, m) {
                                        keep_h,
                                        add_h,
                                        offset_carbon,
-                                       ReactionMode(mode_int));
+                                       ReactionMode(mode_int),
+                                       ignore_stereo);
     },
     "Accepts lists of reactant and product SMILES strings and returns a list of NumPy arrays "
     "representing the Condensed Graph of Reaction (CGR) atom and bond features of the reactions. "
     "SMILES must be atom-mapped and providing a correct, unique mapping is the caller's "
     "responsibility (uniqueness is not validated). keep_h keeps explicit hydrogens already in the "
-    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR.");
+    "SMILES; add_h adds new unmapped hydrogens that become phantom atoms in the CGR. ignore_stereo "
+    "clears R/S and cis/trans stereochemistry from both the reactant and product before "
+    "featurizing.",
+    py::arg("reac_smiles_list"),
+    py::arg("prod_smiles_list"),
+    py::arg("atom_property_list_onehot"),
+    py::arg("atom_property_list_float"),
+    py::arg("bond_property_list"),
+    py::arg("keep_h"),
+    py::arg("add_h"),
+    py::arg("offset_carbon"),
+    py::arg("mode_int"),
+    py::arg("ignore_stereo") = false);
 }

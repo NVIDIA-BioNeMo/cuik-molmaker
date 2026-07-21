@@ -127,10 +127,14 @@ mode = cuik_molmaker.reaction_mode_to_int("REAC_DIFF")
 keep_h = True
 add_h = False
 
+# ignore_stereo clears R/S and cis/trans stereochemistry from both the reactant and
+# product before featurizing (RDKit::MolOps::removeStereochemistry). Defaults to False.
+ignore_stereo = False
+
 rxn_features = cuik_molmaker.batch_reaction_featurizer(
     reac_smiles_list, prod_smiles_list,
     atom_onehot_feature_array, atom_float_feature_array, bond_feature_array,
-    keep_h, add_h, offset_carbon, mode)
+    keep_h, add_h, offset_carbon, mode, ignore_stereo=ignore_stereo)
 
 # CGR atom features from all reactions, concatenated along dimension 0.
 # The feature dimension is doubled relative to a single molecule (reactant + product).

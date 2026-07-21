@@ -504,15 +504,22 @@ CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::s
 //! Unlike parse_mol, this function does NOT clear atom-map numbers and does NOT reorder atoms.
 //! @param keep_h  If true, SmilesParserParams.removeHs = false (retains explicit [H:n] atoms)
 //! @param add_h   If true, RDKit::MolOps::addHs is called after parsing (adds unmapped Hs)
-std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles, bool keep_h, bool add_h);
+//! @param ignore_stereo If true, RDKit::MolOps::removeStereochemistry is called after
+//!                      add_h, clearing R/S and cis/trans stereochemistry.
+std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles,
+                                                 bool                keep_h,
+                                                 bool                add_h,
+                                                 bool                ignore_stereo = false);
 
 //! Parses a reaction SMILES pair into a CompactReaction (atom correspondence + both GraphData).
 //! Both reac_smi and prod_smi must contain atom-map numbers.
 //! keep_h / add_h semantics match chemprop's _ReactionDatapointMixin.from_smi exactly.
+//! ignore_stereo is applied identically to both the reactant and product molecules.
 CUIK_EXPORT CompactReaction parse_reaction(const std::string& reac_smi,
                                            const std::string& prod_smi,
                                            bool               keep_h,
-                                           bool               add_h);
+                                           bool               add_h,
+                                           bool               ignore_stereo = false);
 
 //! Converts a reaction mode name to its integer enum value; throws std::runtime_error on an unknown name.
 CUIK_EXPORT int64_t reaction_mode_to_int(const std::string& mode);
@@ -524,6 +531,8 @@ CUIK_EXPORT int64_t reaction_mode_to_int(const std::string& mode);
 //! @param keep_h  If true, retain explicit mapped [H:n] atoms (required for E2/SN2)
 //! @param add_h   If true, add unmapped Hs via RDKit::MolOps::addHs (after parsing)
 //! @param mode    CGR featurization mode (which combination of reac/prod/diff)
+//! @param ignore_stereo If true, clear R/S and cis/trans stereochemistry from both the
+//!                      reactant and product before featurizing.
 //! @return 5 arrays: [atom_feats, bond_feats, edge_index, rev_edge_index, batch]
 CUIK_EXPORT std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>& reac_smiles_list,
                                                              const std::vector<std::string>& prod_smiles_list,
@@ -533,4 +542,5 @@ CUIK_EXPORT std::vector<py::array> batch_reaction_featurizer(const std::vector<s
                                                              bool                            keep_h,
                                                              bool                            add_h,
                                                              bool                            offset_carbon,
-                                                             ReactionMode                    mode);
+                                                             ReactionMode                    mode,
+                                                             bool                            ignore_stereo = false);
