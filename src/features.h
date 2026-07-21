@@ -428,9 +428,9 @@ CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          sm
 //! Creates an RWMol from a SMILES string.
 //!
 //! If `ordered` is true, and the string contains atom classes, called "bookmarks" in RDKit,
-//! that form a complete (0-based) ordering of the atoms, the atoms will be reordered according
-//! to this explicit order, and the bookmarks will be removed, so that canonical orders
-//! can be correctly compared later.
+//! that form a complete (either 0-based or 1-based) ordering of the atoms, the atoms will be
+//! reordered according to this explicit order, and the bookmarks will be removed, so that
+//! canonical orders can be correctly compared later.
 //!
 //! This is implemented in cuik_molmaker_cpp.cpp, but is declared in this header so
 //! that both labels.cpp and features.cpp can call it.

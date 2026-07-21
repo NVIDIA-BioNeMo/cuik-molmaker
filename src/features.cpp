@@ -694,6 +694,8 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
     // if they indicate a valid order.
     const unsigned int        num_atoms = mol->getNumAtoms();
     std::vector<unsigned int> atom_order(num_atoms);
+    unsigned int              map_num_min = std::numeric_limits<unsigned int>::max();
+    unsigned int              map_num_max = 0;
     for (unsigned int i = 0; i < num_atoms; ++i) {
       RDKit::Atom* atom = mol->getAtomWithIdx(i);
       if (!atom->hasProp(RDKit::common_properties::molAtomMapNumber)) {
@@ -702,10 +704,11 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
         // from any following atoms that might have it.
       } else {
         atom_order[i] = (unsigned int)atom->getAtomMapNum();
-
-        // 0-based, and must be in range
-        if (atom_order[i] >= num_atoms) {
-          ordered = false;
+        if (atom_order[i] < map_num_min) {
+          map_num_min = atom_order[i];
+        }
+        if (atom_order[i] > map_num_max) {
+          map_num_max = atom_order[i];
         }
 
         // Clear the property, so that any equivalent molecules will
@@ -714,13 +717,18 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
       }
     }
 
+    // Must be 0-based or 1-based, and must be a complete permutation
+    if (ordered && num_atoms != 0 && (map_num_min > 1 || map_num_max - map_num_min + 1 != num_atoms)) {
+      ordered = false;
+    }
+
     if (ordered) {
       // Invert the order
       // Use max value as a "not found yet" value
       constexpr unsigned int    not_found_value = std::numeric_limits<unsigned int>::max();
       std::vector<unsigned int> inverse_order(num_atoms, not_found_value);
       for (unsigned int i = 0; i < num_atoms; ++i) {
-        unsigned int index = atom_order[i];
+        unsigned int index = atom_order[i] - map_num_min;
         // Can't have the same index twice
         if (inverse_order[index] != not_found_value) {
           ordered = false;
