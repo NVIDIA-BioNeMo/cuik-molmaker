@@ -14,7 +14,7 @@ from setuptools import find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 # Version for the cuik_molmaker package (cuik_molmaker_pin uses RDKIT_VERSION instead).
-CUIK_MOLMAKER_VERSION = "0.3.0rc1"
+CUIK_MOLMAKER_VERSION = "0.3.0"
 
 # Set global vars
 RDKIT_VERSION = os.environ.get("RDKIT_VERSION")
