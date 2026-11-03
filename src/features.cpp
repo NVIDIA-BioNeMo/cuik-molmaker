@@ -461,11 +461,6 @@ void create_bond_features(const GraphData&            graph,
       }
       // current_bond_data += duplicated_bond_float_count;
     }
-    if (add_self_loop) {
-      // Self loops don't have valid bond data, but don't treat them as NaNs.
-      // Fill with zeros, instead.
-      memset(current_bond_data, 0, graph.num_atoms * graph.num_atoms);
-    }
   }
 }
 
@@ -599,6 +594,13 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
                          add_self_loop,
                          current_bond_data);
     current_bond_data += graph.num_bonds * duplicated_bond_float_count;  // move to position
+  }
+  if (add_self_loop) {
+    // Self loops don't have valid bond data, but don't treat them as NaNs.
+    // Fill with zeros, instead. Exactly one self-loop row is reserved for the
+    // whole batch (see total_num_bonds above), and current_bond_data already
+    // points at its start here, right after the last molecule's bond rows.
+    memset(current_bond_data, 0, single_bond_float_count * sizeof(float));
   }
   const int64_t      bond_dims[2]        = {int64_t(total_num_bonds), int64_t(single_bond_float_count)};
   py::array_t<float> bond_features_array = py_array_from_array<float>(std::move(bond_data), bond_dims, 2);
