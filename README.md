@@ -18,7 +18,7 @@ python -m pip install cuik-molmaker-pin==<RDKit version>
 
 ### Pip installation from NVIDIA PyPI
 ```bash
-python -m pip install cuik-molmaker --extra-index-url https://pypi.nvidia.com/rdkit-2026.03.4/
+python -m pip install cuik-molmaker --extra-index-url https://pypi.nvidia.com/rdkit-2026.09.2/
 ```
 
 For more information on the available versions of `cuik-molmaker` compatible with different versions of `rdkit`, refer to the [COMPATIBILITY.md](docs/COMPATIBILITY.md).
