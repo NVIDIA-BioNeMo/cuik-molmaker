@@ -278,3 +278,57 @@ def test_batch_mol_featurizer(test_data_path, atom_featurizer_version):
         batch,
         err_msg=f"batch diff: {np.abs(features_ref['batch'] - batch).sum()}",
     )
+
+
+
+def test_batch_mol_featurizer_self_loop():
+    # Regression test for the self-loop zero-fill: it must land exactly on the
+    # one row reserved for the whole batch (the last row of bond_feats), and
+    # must not disturb any other molecule's bond features.
+    atom_onehot_property_list = np.array([])
+    atom_float_property_list = np.array([])
+    bond_property_list = cuik_molmaker.bond_feature_names_to_array(
+        ["is-null", "in-ring"]
+    )
+
+    smiles_list = ["CC", "CCO", "c1ccccc1"]
+    explicit_H, offset_carbon, duplicate_edges = False, False, True
+
+    all_feats_no_self_loop = cuik_molmaker.batch_mol_featurizer(
+        smiles_list,
+        atom_onehot_property_list,
+        atom_float_property_list,
+        bond_property_list,
+        explicit_H,
+        offset_carbon,
+        duplicate_edges,
+        False,
+    )
+    bond_feats_no_self_loop = all_feats_no_self_loop[1]
+
+    all_feats_self_loop = cuik_molmaker.batch_mol_featurizer(
+        smiles_list,
+        atom_onehot_property_list,
+        atom_float_property_list,
+        bond_property_list,
+        explicit_H,
+        offset_carbon,
+        duplicate_edges,
+        True,
+    )
+    bond_feats_self_loop = all_feats_self_loop[1]
+
+    assert bond_feats_self_loop.shape[0] == bond_feats_no_self_loop.shape[0] + 1, (
+        "add_self_loop should append exactly one extra bond-feature row"
+    )
+
+    np.testing.assert_allclose(
+        bond_feats_self_loop[:-1],
+        bond_feats_no_self_loop,
+        err_msg="self-loop zero-fill must not disturb any real bond's features",
+    )
+    np.testing.assert_allclose(
+        bond_feats_self_loop[-1],
+        np.zeros(bond_feats_self_loop.shape[1], dtype=bond_feats_self_loop.dtype),
+        err_msg="the reserved self-loop row must be all zeros",
+    )
