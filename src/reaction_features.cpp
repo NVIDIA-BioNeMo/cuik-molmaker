@@ -91,7 +91,10 @@ static std::unordered_map<uint64_t, uint32_t> build_bond_lookup(const GraphData&
 // ---------------------------------------------------------------------------
 // parse_rxn_side_mol
 // ---------------------------------------------------------------------------
-std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles, bool keep_h, bool add_h) {
+std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles,
+                                                 bool                keep_h,
+                                                 bool                add_h,
+                                                 bool                ignore_stereo) {
   RDKit::SmilesParserParams params;
   params.removeHs = !keep_h;  // keep_h=true keeps explicit [H:n] atoms
   std::unique_ptr<RDKit::RWMol> mol{RDKit::SmilesToMol(smiles, params)};
@@ -101,15 +104,21 @@ std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles, bool
   // Do NOT reorder atoms — reactions preserve SMILES parse order.
   if (add_h)
     RDKit::MolOps::addHs(*mol);
+  if (ignore_stereo)
+    RDKit::MolOps::removeStereochemistry(*mol);
   return mol;
 }
 
 // ---------------------------------------------------------------------------
 // parse_reaction
 // ---------------------------------------------------------------------------
-CompactReaction parse_reaction(const std::string& reac_smi, const std::string& prod_smi, bool keep_h, bool add_h) {
-  std::unique_ptr<RDKit::RWMol> reac_mol = parse_rxn_side_mol(reac_smi, keep_h, add_h);
-  std::unique_ptr<RDKit::RWMol> prod_mol = parse_rxn_side_mol(prod_smi, keep_h, add_h);
+CompactReaction parse_reaction(const std::string& reac_smi,
+                               const std::string& prod_smi,
+                               bool                keep_h,
+                               bool                add_h,
+                               bool                ignore_stereo) {
+  std::unique_ptr<RDKit::RWMol> reac_mol = parse_rxn_side_mol(reac_smi, keep_h, add_h, ignore_stereo);
+  std::unique_ptr<RDKit::RWMol> prod_mol = parse_rxn_side_mol(prod_smi, keep_h, add_h, ignore_stereo);
   if (!reac_mol)
     throw std::runtime_error("Failed to parse reactant SMILES: " + reac_smi);
   if (!prod_mol)
@@ -628,7 +637,8 @@ std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>&
                                                  bool                            keep_h,
                                                  bool                            add_h,
                                                  bool                            offset_carbon,
-                                                 ReactionMode                    mode) {
+                                                 ReactionMode                    mode,
+                                                 bool                            ignore_stereo) {
   // Validate inputs up front (before the expensive per-reaction parse loop).
   if (reac_smiles_list.size() != prod_smiles_list.size())
     throw std::runtime_error("reac_smiles_list and prod_smiles_list must have the same length");
@@ -659,7 +669,7 @@ std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>&
   std::vector<CompactReaction> reactions;
   reactions.reserve(n_rxns);
   for (size_t i = 0; i < n_rxns; ++i)
-    reactions.push_back(parse_reaction(reac_smiles_list[i], prod_smiles_list[i], keep_h, add_h));
+    reactions.push_back(parse_reaction(reac_smiles_list[i], prod_smiles_list[i], keep_h, add_h, ignore_stereo));
 
   // Feature dimensions
   const size_t single_atom_fdim   = compute_atom_dim(atom_property_list_onehot, atom_property_list_float);

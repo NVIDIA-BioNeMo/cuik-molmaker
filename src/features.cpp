@@ -25,8 +25,12 @@
 
 // This is called by `mol_featurizer` and `batch_mol_featurizer` to parse the SMILES string into an RWMol and
 // cache some data about the atoms and bonds.
-static GraphData read_graph(const std::string& smiles_string, bool explicit_H) {
-  std::unique_ptr<RDKit::RWMol> mol{parse_mol(smiles_string, explicit_H)};
+static GraphData read_graph(const std::string& smiles_string,
+                            bool                explicit_H,
+                            bool                ordered,
+                            bool                keep_h,
+                            bool                ignore_stereo) {
+  std::unique_ptr<RDKit::RWMol> mol{parse_mol(smiles_string, explicit_H, ordered, keep_h, ignore_stereo)};
 
   if (!mol) {
     return GraphData{0, std::unique_ptr<CompactAtom[]>(), 0, std::unique_ptr<CompactBond[]>(), std::move(mol)};
@@ -519,7 +523,10 @@ std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
                                       bool                        explicit_H,
                                       bool                        offset_carbon,
                                       bool                        duplicate_edges,
-                                      bool                        add_self_loop) {
+                                      bool                        add_self_loop,
+                                      bool                        ordered,
+                                      bool                        keep_h,
+                                      bool                        ignore_stereo) {
   return batch_mol_featurizer(std::vector{smiles_string},
                               atom_property_list_onehot,
                               atom_property_list_float,
@@ -527,7 +534,10 @@ std::vector<py::array> mol_featurizer(const std::string&          smiles_string,
                               explicit_H,
                               offset_carbon,
                               duplicate_edges,
-                              add_self_loop);
+                              add_self_loop,
+                              ordered,
+                              keep_h,
+                              ignore_stereo);
 }
 
 std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smiles_list,
@@ -537,7 +547,10 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
                                             bool                            explicit_H,
                                             bool                            offset_carbon,
                                             bool                            duplicate_edges,
-                                            bool                            add_self_loop) {
+                                            bool                            add_self_loop,
+                                            bool                            ordered,
+                                            bool                            keep_h,
+                                            bool                            ignore_stereo) {
   const size_t n_smiles = smiles_list.size();
 
   // Create graphs
@@ -547,7 +560,7 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
   size_t total_num_atoms = 0, total_num_bonds = 0;
 
   for (const auto& smiles : smiles_list) {
-    GraphData igraph = read_graph(smiles, explicit_H);
+    GraphData igraph = read_graph(smiles, explicit_H, ordered, keep_h, ignore_stereo);
     total_num_atoms += igraph.num_atoms;
     total_num_bonds += igraph.num_bonds;
     graph_list.push_back(std::move(igraph));
@@ -680,9 +693,14 @@ std::vector<py::array> batch_mol_featurizer(const std::vector<std::string>& smil
 
 // Creates an RWMol from a SMILES string.
 // See the declaration in features.h for more details.
-std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool explicit_H, bool ordered) {
-  // Parse SMILES string with default options
-  RDKit::SmilesParserParams     params;
+std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string,
+                                        bool                explicit_H,
+                                        bool                ordered,
+                                        bool                keep_h,
+                                        bool                ignore_stereo) {
+  // Parse SMILES string, optionally keeping explicit hydrogens (keep_h)
+  RDKit::SmilesParserParams params;
+  params.removeHs = !keep_h;  // keep_h=true keeps explicit [H:n] atoms
   std::unique_ptr<RDKit::RWMol> mol{RDKit::SmilesToMol(smiles_string, params)};
   if (!mol) {
     return mol;
@@ -694,6 +712,8 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
     // if they indicate a valid order.
     const unsigned int        num_atoms = mol->getNumAtoms();
     std::vector<unsigned int> atom_order(num_atoms);
+    unsigned int              map_num_min = std::numeric_limits<unsigned int>::max();
+    unsigned int              map_num_max = 0;
     for (unsigned int i = 0; i < num_atoms; ++i) {
       RDKit::Atom* atom = mol->getAtomWithIdx(i);
       if (!atom->hasProp(RDKit::common_properties::molAtomMapNumber)) {
@@ -702,10 +722,11 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
         // from any following atoms that might have it.
       } else {
         atom_order[i] = (unsigned int)atom->getAtomMapNum();
-
-        // 0-based, and must be in range
-        if (atom_order[i] >= num_atoms) {
-          ordered = false;
+        if (atom_order[i] < map_num_min) {
+          map_num_min = atom_order[i];
+        }
+        if (atom_order[i] > map_num_max) {
+          map_num_max = atom_order[i];
         }
 
         // Clear the property, so that any equivalent molecules will
@@ -714,13 +735,18 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
       }
     }
 
+    // Must be 0-based or 1-based, and must be a complete permutation
+    if (ordered && num_atoms != 0 && (map_num_min > 1 || map_num_max - map_num_min + 1 != num_atoms)) {
+      ordered = false;
+    }
+
     if (ordered) {
       // Invert the order
       // Use max value as a "not found yet" value
       constexpr unsigned int    not_found_value = std::numeric_limits<unsigned int>::max();
       std::vector<unsigned int> inverse_order(num_atoms, not_found_value);
       for (unsigned int i = 0; i < num_atoms; ++i) {
-        unsigned int index = atom_order[i];
+        unsigned int index = atom_order[i] - map_num_min;
         // Can't have the same index twice
         if (inverse_order[index] != not_found_value) {
           ordered = false;
@@ -741,6 +767,13 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
     // Default params for SmilesToMol already calls removeHs,
     // and calling it again shouldn't have any net effect.
     // RDKit::MolOps::removeHs(*mol);
+  }
+  if (ignore_stereo) {
+    // Clears chiral tags, the cached _CIPCode property, bond stereo, and bond
+    // directions in one call.  A manual port of clearing only the chiral tag
+    // and bond stereo (as some other tools do) would miss _CIPCode, which the
+    // float `chirality` feature reads directly.
+    RDKit::MolOps::removeStereochemistry(*mol);
   }
   return mol;
 }

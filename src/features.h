@@ -408,6 +408,13 @@ CUIK_EXPORT std::vector<std::string> list_all_bond_features();
 //!                      self-edges.
 //! @param offset_carbon If true, some atom float features will subtract a
 //!                      value representing carbon, so that carbon atoms would have value zero.
+//! @param ordered If true, atom map numbers in the SMILES string that form a complete ordering
+//!                of the atoms will be used to reorder them.  See `parse_mol` for details.
+//! @param keep_h If true, explicit hydrogen atoms already written in the SMILES string are
+//!               kept (SmilesParserParams::removeHs = false).  This does not add any hydrogens;
+//!               see `explicit_H` for that.
+//! @param ignore_stereo If true, R/S and cis/trans stereochemistry is cleared from the
+//!                      molecule (RDKit::MolOps::removeStereochemistry) after parsing.
 //! @return A vector of torch NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, `num_atoms` by the number of values required for all one-hot and float atom
 //!         features.  The second array is the bond features array, `num_edges` (or
@@ -423,18 +430,29 @@ CUIK_EXPORT std::vector<py::array> mol_featurizer(const std::string&          sm
                                                   bool                        explicit_H,
                                                   bool                        offset_carbon,
                                                   bool                        duplicate_edges,
-                                                  bool                        add_self_loop);
+                                                  bool                        add_self_loop,
+                                                  bool                        ordered       = true,
+                                                  bool                        keep_h        = false,
+                                                  bool                        ignore_stereo = false);
 
 //! Creates an RWMol from a SMILES string.
 //!
 //! If `ordered` is true, and the string contains atom classes, called "bookmarks" in RDKit,
-//! that form a complete (0-based) ordering of the atoms, the atoms will be reordered according
-//! to this explicit order, and the bookmarks will be removed, so that canonical orders
-//! can be correctly compared later.
+//! that form a complete (either 0-based or 1-based) ordering of the atoms, the atoms will be
+//! reordered according to this explicit order, and the bookmarks will be removed, so that
+//! canonical orders can be correctly compared later.
+//!
+//! If `keep_h` is true, explicit hydrogen atoms already written in the SMILES string are kept
+//! (this does not add any hydrogens). If `ignore_stereo` is true, R/S and cis/trans
+//! stereochemistry is cleared from the molecule after parsing.
 //!
 //! This is implemented in cuik_molmaker_cpp.cpp, but is declared in this header so
 //! that both labels.cpp and features.cpp can call it.
-std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool explicit_H, bool ordered = true);
+std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string,
+                                        bool                explicit_H,
+                                        bool                ordered       = true,
+                                        bool                keep_h        = false,
+                                        bool                ignore_stereo = false);
 
 //! `batch_mol_featurizer` is called from Python to get feature arrays for `smiles_list`.
 //!
@@ -455,6 +473,12 @@ std::unique_ptr<RDKit::RWMol> parse_mol(const std::string& smiles_string, bool e
 //!                      value representing carbon, so that carbon atoms would have value zero.
 //! @param add_self_loop If true, bond features will have values stored for
 //!                      self-edges.
+//! @param ordered If true, atom map numbers in each SMILES string that form a complete ordering
+//!                of the atoms will be used to reorder them.  See `parse_mol` for details.
+//! @param keep_h If true, explicit hydrogen atoms already written in each SMILES string are
+//!               kept.  See `parse_mol` for details.
+//! @param ignore_stereo If true, R/S and cis/trans stereochemistry is cleared from each
+//!                      molecule after parsing.  See `parse_mol` for details.
 //! @return A vector of NumPy/pybind arrays for the features.  The first array is the atom features
 //!         array, total number of atoms  by the number of values required for all one-hot and
 //!         float atom features.  The second array is the bond features array, total number of
@@ -471,21 +495,31 @@ CUIK_EXPORT std::vector<py::array> batch_mol_featurizer(const std::vector<std::s
                                                         bool                            explicit_H,
                                                         bool                            offset_carbon,
                                                         bool                            duplicate_edges,
-                                                        bool                            add_self_loop);
+                                                        bool                            add_self_loop,
+                                                        bool                            ordered       = true,
+                                                        bool                            keep_h        = false,
+                                                        bool                            ignore_stereo = false);
 
 //! Parses one side of a reaction SMILES into an RWMol, preserving atom-map numbers.
 //! Unlike parse_mol, this function does NOT clear atom-map numbers and does NOT reorder atoms.
 //! @param keep_h  If true, SmilesParserParams.removeHs = false (retains explicit [H:n] atoms)
 //! @param add_h   If true, RDKit::MolOps::addHs is called after parsing (adds unmapped Hs)
-std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles, bool keep_h, bool add_h);
+//! @param ignore_stereo If true, RDKit::MolOps::removeStereochemistry is called after
+//!                      add_h, clearing R/S and cis/trans stereochemistry.
+std::unique_ptr<RDKit::RWMol> parse_rxn_side_mol(const std::string& smiles,
+                                                 bool                keep_h,
+                                                 bool                add_h,
+                                                 bool                ignore_stereo = false);
 
 //! Parses a reaction SMILES pair into a CompactReaction (atom correspondence + both GraphData).
 //! Both reac_smi and prod_smi must contain atom-map numbers.
 //! keep_h / add_h semantics match chemprop's _ReactionDatapointMixin.from_smi exactly.
+//! ignore_stereo is applied identically to both the reactant and product molecules.
 CUIK_EXPORT CompactReaction parse_reaction(const std::string& reac_smi,
                                            const std::string& prod_smi,
                                            bool               keep_h,
-                                           bool               add_h);
+                                           bool               add_h,
+                                           bool               ignore_stereo = false);
 
 //! Converts a reaction mode name to its integer enum value; throws std::runtime_error on an unknown name.
 CUIK_EXPORT int64_t reaction_mode_to_int(const std::string& mode);
@@ -497,6 +531,8 @@ CUIK_EXPORT int64_t reaction_mode_to_int(const std::string& mode);
 //! @param keep_h  If true, retain explicit mapped [H:n] atoms (required for E2/SN2)
 //! @param add_h   If true, add unmapped Hs via RDKit::MolOps::addHs (after parsing)
 //! @param mode    CGR featurization mode (which combination of reac/prod/diff)
+//! @param ignore_stereo If true, clear R/S and cis/trans stereochemistry from both the
+//!                      reactant and product before featurizing.
 //! @return 5 arrays: [atom_feats, bond_feats, edge_index, rev_edge_index, batch]
 CUIK_EXPORT std::vector<py::array> batch_reaction_featurizer(const std::vector<std::string>& reac_smiles_list,
                                                              const std::vector<std::string>& prod_smiles_list,
@@ -506,4 +542,5 @@ CUIK_EXPORT std::vector<py::array> batch_reaction_featurizer(const std::vector<s
                                                              bool                            keep_h,
                                                              bool                            add_h,
                                                              bool                            offset_carbon,
-                                                             ReactionMode                    mode);
+                                                             ReactionMode                    mode,
+                                                             bool                            ignore_stereo = false);
