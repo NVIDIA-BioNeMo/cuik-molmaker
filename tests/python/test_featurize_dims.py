@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved. # noqa: E501
 # SPDX-License-Identifier: Apache-2.0
 
+import pickle
+
+import numpy as np
 from rdkit import Chem
 
 import cuik_molmaker
@@ -184,3 +187,26 @@ def test_batch_mol_featurizer_dims(smiles_list_100):
     assert (
         batch.shape[0] == total_num_atoms
     ), f"batch.shape[0]: {batch.shape[0]}, total_num_atoms: {total_num_atoms}"
+
+
+def test_batch_mol_featurizer_pickled_property_lists(smiles_list_100):
+    # Unpickled arrays carry an equal but distinct int64 dtype object, as
+    # happens when a DataLoader with spawn workers copies the featurizer.
+    property_lists = (
+        cuik_molmaker.atom_onehot_feature_names_to_array(
+            ["atomic-number", "total-degree", "hybridization"]
+        ),
+        cuik_molmaker.atom_float_feature_names_to_array(["aromatic", "mass"]),
+        cuik_molmaker.bond_feature_names_to_array(["is-null", "bond-type-onehot"]),
+    )
+    pickled_lists = tuple(pickle.loads(pickle.dumps(a)) for a in property_lists)
+
+    flags = (False, False, True, False)
+    expected = cuik_molmaker.batch_mol_featurizer(
+        smiles_list_100, *property_lists, *flags
+    )
+    actual = cuik_molmaker.batch_mol_featurizer(smiles_list_100, *pickled_lists, *flags)
+
+    assert len(actual) == len(expected)
+    for got, want in zip(actual, expected):
+        np.testing.assert_array_equal(got, want)
