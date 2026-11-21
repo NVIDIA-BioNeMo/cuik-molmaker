@@ -392,13 +392,13 @@ void create_atom_features(const GraphData&            graph,
                           bool                        offset_carbon,
                           T*                          current_atom_data) {
   const size_t num_onehot_properties =
-    (atom_property_list_onehot.dtype() == py::dtype("int64") && atom_property_list_onehot.ndim() == 1) ?
+    (atom_property_list_onehot.dtype().equal(py::dtype("int64")) && atom_property_list_onehot.ndim() == 1) ?
       atom_property_list_onehot.shape(0) :
       0;
   const int64_t* const property_list_onehot =
     (num_onehot_properties != 0) ? static_cast<const int64_t*>(atom_property_list_onehot.data()) : nullptr;
   const size_t num_float_properties =
-    (atom_property_list_float.dtype() == py::dtype("int64") && atom_property_list_float.ndim() == 1) ?
+    (atom_property_list_float.dtype().equal(py::dtype("int64")) && atom_property_list_float.ndim() == 1) ?
       atom_property_list_float.shape(0) :
       0;
   const int64_t* const property_list_float =
@@ -428,7 +428,7 @@ void create_bond_features(const GraphData&            graph,
                           const bool                  duplicate_edges,
                           bool                        add_self_loop,
                           T*                          current_bond_data) {
-  const size_t num_properties = (bond_property_list.dtype() == py::dtype("int64") && bond_property_list.ndim() == 1) ?
+  const size_t num_properties = (bond_property_list.dtype().equal(py::dtype("int64")) && bond_property_list.ndim() == 1) ?
                                   bond_property_list.shape(0) :
                                   0;
   const int64_t* const property_list =
@@ -473,13 +473,13 @@ void create_bond_features(const GraphData&            graph,
 size_t compute_atom_dim(const py::array_t<int64_t>& atom_property_list_onehot,
                         const py::array_t<int64_t>& atom_property_list_float) {
   const size_t num_onehot_properties =
-    (atom_property_list_onehot.dtype() == py::dtype("int64") && atom_property_list_onehot.ndim() == 1) ?
+    (atom_property_list_onehot.dtype().equal(py::dtype("int64")) && atom_property_list_onehot.ndim() == 1) ?
       atom_property_list_onehot.shape(0) :
       0;
   const int64_t* const property_list_onehot =
     (num_onehot_properties != 0) ? static_cast<const int64_t*>(atom_property_list_onehot.data()) : nullptr;
   const size_t num_float_properties =
-    (atom_property_list_float.dtype() == py::dtype("int64") && atom_property_list_float.ndim() == 1) ?
+    (atom_property_list_float.dtype().equal(py::dtype("int64")) && atom_property_list_float.ndim() == 1) ?
       atom_property_list_float.shape(0) :
       0;
   const int64_t* const property_list_float =
@@ -495,7 +495,7 @@ size_t compute_atom_dim(const py::array_t<int64_t>& atom_property_list_onehot,
 
 // Computes the total dimension of bond features based on the property list
 size_t compute_bond_dim(const py::array_t<int64_t>& bond_property_list) {
-  const size_t num_properties = (bond_property_list.dtype() == py::dtype("int64") && bond_property_list.ndim() == 1) ?
+  const size_t num_properties = (bond_property_list.dtype().equal(py::dtype("int64")) && bond_property_list.ndim() == 1) ?
                                   bond_property_list.shape(0) :
                                   0;
   const int64_t* const property_list =
